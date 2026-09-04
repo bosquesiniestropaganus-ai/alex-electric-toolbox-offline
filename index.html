@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07111f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<title>Alex Electric Toolbox Offline</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div id="accessGate" class="access-gate">
+  <div class="access-card">
+    <div class="access-brand"><div class="logo">⚡</div><div><h2>Alex Electric Toolbox Offline</h2><small>PC · iPhone · sin señal</small></div></div>
+    <p>Esta versión no pide correo ni PIN. Importa el paquete descargado desde tu Alex Toolbox online para llevar tus guías, resúmenes y quiz al modo offline.</p>
+    <label class="btn green full" style="margin:12px 0;text-align:center">Importar contenido offline
+      <input type="file" accept=".json,application/json" style="display:none" onchange="importOfflinePackageFile(event)">
+    </label>
+    <button class="btn secondary full" onclick="startOfflineEmpty()">Entrar solo con calculadoras</button>
+    <div id="offlineGateStatus" class="result access-status">Primera instalación: importa <strong>alex-toolbox-offline-data.json</strong>.</div>
+  </div>
+</div>
+<div id="appShell class="shell hidden">
+<header class="top">
+  <div class="brand"><div class="logo">⚡</div><div><h1>Alex Electric Toolbox</h1><small>Electricidad · Automatización · Estudio</small></div></div>
+  <div class="top-actions"><span id="accessUserBadge" class="user-badge">Offline</span><button class="icon owner-only" onclick="showView('settings')" aria-label="Ajustes">⚙</button></div>
+</header>
+
+<main>
+<section id="home" class="view active">
+  <div class="hero">
+    <p class="kicker">Herramienta técnica personal · V3.0 OFFLINE</p>
+    <h2>Calcula. Comprueba. Aprende.</h2>
+    <p>Calculadoras y Centro de Estudios disponibles sin señal. Los resúmenes y quiz funcionan con el contenido que hayas descargado previamente desde la versión online.</p><div class="result good" style="margin-top:14px"><strong>Modo offline activo.</strong> Gemini, Drive y la sincronización requieren internet.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span>Calculadoras</span><strong>18+</strong><small>Herramientas</small></div>
+    <div class="stat"><span>Guías</span><strong id="homeGuides">0</strong><small>Biblioteca</small></div>
+    <div class="stat"><span>Progreso</span><strong id="homeProgress">0%</strong><small>Temas repasados</small></div>
+    <div class="stat"><span>Quiz</span><strong id="homeQuiz">0/0</strong><small>Aciertos locales</small></div>
+  </div>
+
+  <div class="sect"><h3>Calculadoras principales</h3><small>Toca para abrir</small></div>
+  <div class="grid">
+    <button class="tile" onclick="openCalc('ohm')"><span>⚡</span><b>Ley de Ohm</b><small>V, I, R y potencia.</small></button>
+    <button class="tile" onclick="openCalc('power')"><span>🔌</span><b>Potencia AC</b><small>Monofásica y trifásica.</small></button>
+    <button class="tile" onclick="openCalc('resistors')"><span>〰️</span><b>Resistencias</b><small>Serie, paralelo y mixto.</small></button>
+    <button class="tile" onclick="openCalc('rlc')"><span>🌀</span><b>RLC en CA</b><small>XL, XC, Z y fase.</small></button>
+    <button class="tile" onclick="openCalc('drop')"><span>📏</span><b>Caída de tensión</b><small>Comprobación preliminar.</small></button>
+    <button class="tile" onclick="openCalc('concentric')"><span>🧾</span><b>Cuadro de carga + concéntrico</b><small>Empalme monofásico Frontel.</small></button>
+    <button class="tile" onclick="openCalc('energy')"><span>💡</span><b>Consumo y kWh</b><small>Tarifa configurable por ubicación.</small></button>
+    <button class="tile" onclick="openCalc('area')"><span>▦</span><b>Metros cuadrados</b><small>Área y acumulación de sectores.</small></button>
+    <button class="tile" onclick="openCalc('takeoff')"><span>🧰</span><b>Cubicación</b><small>Conductores, canalización y puntos.</small></button>
+    <button class="tile" onclick="openCalc('divider')"><span>➗</span><b>Divisores</b><small>Tensión y corriente.</small></button>
+    <button class="tile" onclick="openCalc('transformer')"><span>🔄</span><b>Transformador</b><small>Relación V, I y espiras.</small></button>
+    <button class="tile" onclick="openCalc('awg')"><span>📐</span><b>AWG ↔ mm²</b><small>Equivalencia geométrica.</small></button>
+    <button class="tile" onclick="openCalc('frequency')"><span>⏱️</span><b>Frecuencia</b><small>Hz, período y rpm.</small></button>
+    <button class="tile" onclick="openCalc('motor')"><span>⚙️</span><b>Motor</b><small>Corriente estimada.</small></button>
+    <button class="tile" onclick="openCalc('pf')"><span>📊</span><b>Factor de potencia</b><small>Compensación kVAr.</small></button>
+    <button class="tile" onclick="showView('study')"><span>📚</span><b>Centro de Estudios</b><small>Guías, resúmenes y quiz dinámicos.</small></button>
+  </div>
+
+  <div class="sect"><h3>Segundo semestre</h3><small>6 ramos</small></div>
+  <div id="homeModules"></div>
+</section>
+
+<section id="calculators" class="view">
+  <div class="heading"><button class="back" onclick="showView('home')">‹</button><div><p class="kicker">Calculadoras</p><h2 id="calcTitle">Herramientas eléctricas</h2></div></div>
+  <div class="tabs" id="calcTabs">
+    <button class="tab" data-calc="ohm">Ohm</button><button class="tab" data-calc="power">Potencia AC</button><button class="tab" data-calc="resistors">Resistencias</button><button class="tab" data-calc="divider">Divisores</button><button class="tab" data-calc="energy">Consumo</button><button class="tab" data-calc="area">m²</button><button class="tab" data-calc="takeoff">Cubicación</button><button class="tab" data-calc="drop">Caída V</button><button class="tab" data-calc="concentric">Concéntrico</button><button class="tab" data-calc="rlc">RLC</button><button class="tab" data-calc="transformer">Transformador</button><button class="tab" data-calc="awg">AWG/mm²</button><button class="tab" data-calc="frequency">Frecuencia</button><button class="tab" data-calc="motor">Motor</button><button class="tab" data-calc="pf">FP</button>
+  </div>
+
+  <div id="calc-ohm" class="calc-panel"><div class="panel"><h3>Ley de Ohm + potencia</h3><p class="muted">Ingresa dos valores conocidos y deja los demás vacíos.</p><div class="form4"><label>Voltaje V<input id="ohmV" type="number" step="any"></label><label>Corriente A<input id="ohmI" type="number" step="any"></label><label>Resistencia Ω<input id="ohmR" type="number" step="any"></label><label>Potencia W<input id="ohmP" type="number" step="any"></label></div><div class="btnrow"><button class="btn" onclick="calcOhm()">Calcular</button><button class="btn secondary" onclick="clearIds(['ohmV','ohmI','ohmR','ohmP'],'ohmResult')">Limpiar</button></div><div id="ohmResult" class="result">Resultado: —</div><div class="formula"><code>V = I × R</code><small>P = V × I</small></div></div></div>
+
+  <div id="calc-power" class="calc-panel"><div class="panel"><h3>Potencia en corriente alterna</h3><div class="form4"><label>Sistema<select id="pSystem"><option value="1">Monofásico</option><option value="3">Trifásico</option></select></label><label>Voltaje V<input id="pV" type="number" step="any" value="220"></label><label>Corriente A<input id="pI" type="number" step="any"></label><label>Factor de potencia<input id="pPF" type="number" min="0" max="1" step="0.01" value="0.9"></label></div><button class="btn full" onclick="calcPower()">Calcular P, S y Q</button><div id="pResult" class="result">Resultado: —</div><div class="formula"><code>P1φ = V·I·cosφ</code><small>P3φ = √3·V·I·cosφ</small></div></div></div>
+
+  <div id="calc-resistors" class="calc-panel"><div class="panel"><h3>Resistencia equivalente</h3><label>Valores separados por coma<input id="resValues" placeholder="100, 220, 330"></label><label>Conexión<select id="resMode"><option value="series">Serie</option><option value="parallel">Paralelo</option></select></label><button class="btn full" onclick="calcResistors()">Calcular Req</button><div id="resResult" class="result">Resultado: —</div></div><div class="panel"><h3>Mixto guiado</h3><p class="muted">R1 en serie con el paralelo R2 || R3.</p><div class="form3"><label>R1 Ω<input id="mixR1" type="number" step="any"></label><label>R2 Ω<input id="mixR2" type="number" step="any"></label><label>R3 Ω<input id="mixR3" type="number" step="any"></label></div><button class="btn full" onclick="calcMixed()">Calcular</button><div id="mixResult" class="result">Resultado: —</div></div></div>
+
+  <div id="calc-divider" class="calc-panel"><div class="panel"><h3>Divisor de tensión</h3><div class="form3"><label>Vin V<input id="dvVin" type="number" step="any"></label><label>R1 Ω<input id="dvR1" type="number" step="any"></label><label>R2 Ω<input id="dvR2" type="number" step="any"></label></div><button class="btn full" onclick="calcVoltageDivider()">Calcular Vout</button><div id="dvResult" class="result">Resultado: —</div></div><div class="panel"><h3>Divisor de corriente — 2 ramas</h3><div class="form3"><label>It A<input id="diIt" type="number" step="any"></label><label>R1 Ω<input id="diR1" type="number" step="any"></label><label>R2 Ω<input id="diR2" type="number" step="any"></label></div><button class="btn full" onclick="calcCurrentDivider()">Calcular I1 e I2</button><div id="diResult" class="result">Resultado: —</div></div></div>
+
+  <div id="calc-energy" class="calc-panel"><div class="panel"><h3>Consumo y costo</h3><p class="muted">La tarifa se carga desde Ajustes. Puedes cambiar el precio solo para este cálculo sin modificar la configuración.</p><div class="form4"><label>Potencia W<input id="ePower" type="number" step="any"></label><label>Horas/día<input id="eHours" type="number" step="any"></label><label>Días<input id="eDays" type="number" value="30"></label><label>Precio $/kWh<input id="ePrice" type="number" step="any"></label></div><div class="result" id="energyTariffInfo">Tarifa: cargando…</div><button class="btn full" onclick="calcEnergy()">Calcular</button><div id="eResult" class="result">Resultado: —</div><div class="formula"><code>E(kWh)=P(kW)×t(h)</code><small>Costo = kWh × tarifa</small></div></div></div>
+
+  <div id="calc-area" class="calc-panel">
+    <div class="panel"><h3>Calculadora de superficie</h3>
+      <div class="form3"><label>Figura<select id="areaShape" onchange="renderAreaFields()"><option value="rect">Rectángulo</option><option value="square">Cuadrado</option><option value="tri">Triángulo</option><option value="circle">Círculo</option></select></label><label id="areaALabel">Largo m<input id="areaA" type="number" step="any"></label><label id="areaBLabel">Ancho m<input id="areaB" type="number" step="any"></label></div>
+      <div class="btnrow"><button class="btn" onclick="calcArea(false)">Calcular</button><button class="btn green" onclick="calcArea(true)">Calcular y sumar</button><button class="btn secondary" onclick="resetAreaTotal()">Reiniciar total</button></div>
+      <div id="areaResult" class="result">Área: —</div><div class="result good"><strong>Total acumulado:</strong> <span id="areaTotal">0</span> m²</div>
+    </div>
+  </div>
+
+  <div id="calc-takeoff" class="calc-panel">
+    <div class="panel"><h3>Cubicación eléctrica preliminar</h3><p class="muted">Calcula cantidades geométricas. No selecciona sección de conductor ni calibre de protecciones: esas decisiones requieren cálculo eléctrico y verificación normativa.</p>
+      <div class="form3">
+        <label>Proyecto<input id="cubProject" placeholder="Ej: Sala de clases"></label>
+        <label>Tipo<select id="cubType"><option>Iluminación</option><option>Enchufes</option><option>Alimentador</option><option>Industrial</option><option>Personalizado</option></select></label>
+        <label>Ubicación<input id="cubLocation" placeholder="Angol"></label>
+        <label>Largo recinto m<input id="cubL" type="number" step="any"></label>
+        <label>Ancho recinto m<input id="cubW" type="number" step="any"></label>
+        <label>Merma / reserva %<input id="cubWaste" type="number" value="10" min="0" max="100"></label>
+        <label>Luminarias<input id="cubLights" type="number" value="0" min="0"></label>
+        <label>Interruptores<input id="cubSwitches" type="number" value="0" min="0"></label>
+        <label>Enchufes<input id="cubOutlets" type="number" value="0" min="0"></label>
+        <label>Cajas de derivación<input id="cubBoxes" type="number" value="0" min="0"></label>
+        <label>Conductores por recorrido<input id="cubConductors" type="number" value="3" min="1"></label>
+        <label>Circuitos declarados<input id="cubCircuits" type="number" value="1" min="1"></label>
+      </div>
+      <label>Recorridos / tramos en metros<textarea id="cubRuns" placeholder="Puedes escribir: 8, 3.2, 4.5&#10;o una línea por tramo: Tablero-Caja1 = 8 m"></textarea></label>
+      <label>Observaciones<textarea id="cubNotes" placeholder="Condiciones del proyecto, canalización, restricciones…"></textarea></label>
+      <div class="btnrow"><button class="btn" onclick="calcTakeoff()">Calcular cubicación</button><button class="btn green" onclick="saveTakeoff()" id="saveCubBtn" disabled>Guardar en planilla</button></div>
+      <div id="cubResult" class="result">Resultado: —</div>
+      <p class="note">La cantidad calculada es una estimación de metrado. Sección de conductores, protecciones, canalizaciones admisibles y demás exigencias deben revisarse con las condiciones reales del proyecto y la normativa SEC/RIC vigente.</p>
+    </div>
+  </div>
+
+
+  <div id="calc-concentric" class="calc-panel">
+    <div class="panel">
+      <h3>Cuadro de carga + cable concéntrico</h3>
+      <p class="muted">Para empalme aéreo monofásico A-6 / A-9 en zona Frontel. Suma las cargas, aplica factor de demanda y obtiene corriente, protección normalizada y cable concéntrico de referencia.</p>
+
+      <div class="form4">
+        <label>Voltaje V<input id="ccVoltage" type="number" step="any" value="220"></label>
+        <label>Factor de potencia<input id="ccPF" type="number" min="0.1" max="1" step="0.01" value="1"></label>
+        <label>Longitud acometida m<input id="ccLength" type="number" min="0" step="any" value="10"></label>
+        <label>Reserva carga %<input id="ccReserve" type="number" min="0" max="100" step="any" value="0"></label>
+      </div>
+
+      <div class="sect" style="margin-top:14px"><h3>Cargas</h3><small>Factor de demanda por fila</small></div>
+      <div class="tablewrap">
+        <table class="load-table">
+          <thead>
+            <tr>
+              <th>Circuito / carga</th>
+              <th>Cant.</th>
+              <th>W/unidad</th>
+              <th>FD %</th>
+              <th>Instalado</th>
+              <th>Demandado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ccLoadBody"></tbody>
+        </table>
+      </div>
+
+      <div class="btnrow">
+        <button class="btn secondary" onclick="addConcentricRow()">+ Agregar carga</button>
+        <button class="btn" onclick="calcConcentricLoad()">Calcular cuadro de carga</button>
+        <button class="btn secondary" onclick="resetConcentricRows()">Limpiar</button>
+      </div>
+
+      <div id="ccResult" class="result">Resultado: —</div>
+
+      <p class="note">
+        <strong>Referencia usada:</strong> RIC N°01 Anexo 1.3 para empalmes monofásicos normalizados y norma Frontel/Grupo Saesa actualizada febrero 2025 para A-6/A-9. En esa norma, cable concéntrico 2×4 mm² admite hasta 25 A y acometida aérea de hasta 10 m; 2×6 mm² hasta 40 A y 30 m. El resultado es una ayuda de diseño: la factibilidad, el empalme y la construcción final deben verificarse con Frontel y normativa SEC/RIC vigente.
+      </p>
+    </div>
+  </div>
+
+  <div id="calc-drop" class="calc-panel"><div class="panel"><h3>Caída de tensión aproximada</h3><p class="muted">Modelo resistivo simplificado para estudio y comprobación preliminar.</p><div class="form3"><label>Sistema<select id="vdSystem"><option value="1">CC / Monofásico</option><option value="3">Trifásico</option></select></label><label>Material<select id="vdMaterial"><option value="0.0175">Cobre</option><option value="0.0282">Aluminio</option></select></label><label>Voltaje V<input id="vdV" type="number" value="220"></label><label>Corriente A<input id="vdI" type="number" step="any"></label><label>Longitud unidireccional m<input id="vdL" type="number" step="any"></label><label>Sección mm²<input id="vdS" type="number" step="any"></label></div><button class="btn full" onclick="calcVoltageDrop()">Calcular</button><div id="vdResult" class="result">Resultado: —</div><div class="formula"><code>ΔV ≈ k·ρ·L·I/S</code><small>k=2 o √3</small></div></div></div>
+
+  <div id="calc-rlc" class="calc-panel"><div class="panel"><h3>RLC serie en CA</h3><div class="form4"><label>Voltaje RMS V<input id="rlcV" type="number" value="220"></label><label>Frecuencia Hz<input id="rlcF" type="number" value="50"></label><label>R Ω<input id="rlcR" type="number" step="any"></label><label>L H<input id="rlcL" type="number" step="any"></label><label>C µF<input id="rlcC" type="number" step="any"></label></div><button class="btn full" onclick="calcRLC()">Calcular RLC</button><div id="rlcResult" class="result">Resultado: —</div><div class="formula"><code>XL=2πfL · XC=1/(2πfC)</code><small>Z=√(R²+(XL−XC)²)</small></div></div></div>
+
+  <div id="calc-transformer" class="calc-panel"><div class="panel"><h3>Transformador ideal</h3><p class="muted">Ingresa V1 y V2. Puedes agregar N1/N2 o I1/I2 para obtener el otro valor.</p><div class="form3"><label>V1<input id="trV1" type="number" step="any"></label><label>V2<input id="trV2" type="number" step="any"></label><label>N1 espiras<input id="trN1" type="number" step="any"></label><label>N2 espiras<input id="trN2" type="number" step="any"></label><label>I1 A<input id="trI1" type="number" step="any"></label><label>I2 A<input id="trI2" type="number" step="any"></label></div><button class="btn full" onclick="calcTransformer()">Calcular relación</button><div id="trResult" class="result">Resultado: —</div><div class="formula"><code>V1/V2=N1/N2=I2/I1</code><small>Modelo ideal</small></div></div></div>
+
+  <div id="calc-awg" class="calc-panel"><div class="panel"><h3>Conversor AWG ↔ mm²</h3><div class="form2"><label>AWG<select id="awgSelect"></select></label><label>Área aproximada<input id="awgMM" readonly></label></div><div id="awgInfo" class="result">Selecciona un calibre.</div></div><div class="panel"><h3>Tabla rápida</h3><div class="tablewrap"><table><thead><tr><th>AWG</th><th>Área mm²</th><th>Diámetro mm</th></tr></thead><tbody id="awgTable"></tbody></table></div><p class="note">La equivalencia geométrica no define por sí sola la corriente admisible del conductor.</p></div></div>
+
+  <div id="calc-frequency" class="calc-panel"><div class="panel"><h3>Frecuencia y período</h3><div class="form2"><label>Frecuencia Hz<input id="fqF" type="number" step="any"></label><label>Período s<input id="fqT" type="number" step="any"></label></div><button class="btn full" onclick="calcFrequency()">Calcular</button><div id="fqResult" class="result">Resultado: —</div></div><div class="panel"><h3>Velocidad sincrónica</h3><div class="form2"><label>Frecuencia Hz<input id="nsF" type="number" value="50"></label><label>Polos<input id="nsP" type="number" value="4" step="2"></label></div><button class="btn full" onclick="calcSyncSpeed()">Calcular rpm</button><div id="nsResult" class="result">Resultado: —</div></div></div>
+
+  <div id="calc-motor" class="calc-panel"><div class="panel"><h3>Corriente aproximada de motor</h3><div class="form3"><label>Sistema<select id="mPhase"><option value="1">Monofásico</option><option value="3" selected>Trifásico</option></select></label><label>Potencia kW<input id="mKW" type="number" step="any"></label><label>Voltaje V<input id="mV" type="number" value="380"></label><label>Eficiencia η<input id="mEff" type="number" value="0.88" step="0.01"></label><label>Factor potencia<input id="mPF" type="number" value="0.82" step="0.01"></label></div><button class="btn full" onclick="calcMotor()">Estimar corriente</button><div id="mResult" class="result">Resultado: —</div><p class="note">Para decisiones reales usa placa del motor, mediciones y criterios de diseño/protección aplicables.</p></div></div>
+
+  <div id="calc-pf" class="calc-panel"><div class="panel"><h3>Corrección de factor de potencia</h3><div class="form3"><label>Potencia activa kW<input id="pfKW" type="number" step="any"></label><label>FP inicial<input id="pfInitial" type="number" step="0.01"></label><label>FP objetivo<input id="pfTarget" type="number" value="0.95" step="0.01"></label></div><button class="btn full" onclick="calcPF()">Calcular compensación</button><div id="pfResult" class="result">Resultado: —</div><div class="formula"><code>Qc=P(tanφ1−tanφ2)</code><small>kVAr aprox.</small></div></div></div>
+</section>
+
+<section id="study" class="view">
+  <div class="heading"><button class="back" onclick="showView('home')">‹</button><div><p class="kicker">Segundo semestre</p><h2>Centro de Estudios</h2></div></div>
+  <div class="panel">
+    <div class="form2">
+      <div><h3 style="margin-bottom:5px">Progreso de repaso</h3><div class="progress"><div id="studyBar" class="bar"></div></div><p class="muted"><span id="studyPct">0%</span> de temas base repasados.</p></div>
+      <div><h3 style="margin-bottom:5px">IA para guías</h3><p class="inline-status"><span id="aiDot" class="dot"></span><span id="aiLabel">Comprobando configuración…</span></p></div>
+    </div>
+  </div>
+  <div id="studyChips" class="chips"></div>
+
+  <div class="panel">
+    <h3>Biblioteca del ramo</h3>
+    <p class="muted">Sube la guía del profesor. Para el análisis automático completo se recomienda PDF; también puedes guardar otros formatos en la biblioteca.</p>
+    <div id="guideUploadPanel" class="dropzone owner-only hidden">
+      <div class="form2"><label>Título de la guía<input id="guideTitle" placeholder="Ej: Guía 1 - Corriente alterna"></label><label>Archivo<input id="guideFile" type="file" accept=".pdf,.txt,.md,.csv,.rtf,.png,.jpg,.jpeg,.webp,.doc,.docx,.ppt,.pptx"></label></div>
+      <div class="btnrow"><button class="btn green" id="uploadGuideBtn" onclick="uploadGuide()">Subir guía</button></div>
+    </div>
+    <div class="module-actions">
+      <button class="btn secondary" onclick="summarizeCurrentModule()">Estudiar todo el ramo offline</button>
+    </div>
+    <div class="result good"><strong>Offline:</strong> estudiar y hacer quiz funciona sin señal. Para procesar material nuevo usa la app online y vuelve a importar el paquete.</div>
+    <div id="guideList" style="margin-top:12px"></div>
+  </div>
+
+  <div id="moduleStudy"></div>
+</section>
+
+<section id="guideStudy" class="view">
+  <div class="heading"><button class="back" onclick="showView('study')">‹</button><div><p class="kicker">Guía procesada</p><h2 id="guideStudyTitle">Estudiar guía</h2></div></div>
+  <div id="guideStudyContent" class="panel study-output"></div>
+  <div class="panel">
+    <h3>Preguntar a esta guía</h3>
+    <label>Tu pregunta<textarea id="guideQuestion" placeholder="Ej: Explícame esta fórmula más fácil"></textarea></label>
+    <button class="btn full" onclick="askCurrentGuide()">Preguntar</button>
+    <div id="guideAnswer" class="result">Respuesta: —</div>
+  </div>
+</section>
+
+<section id="quiz" class="view">
+  <div class="heading"><button class="back" onclick="showView('study')">‹</button><div><p class="kicker">Práctica</p><h2>Quiz dinámico</h2></div></div>
+  <div class="panel">
+    <div class="form2"><label>Ramo<select id="quizModule"></select></label><label>Cantidad<select id="quizCount"><option>5</option><option selected>10</option><option>15</option><option>20</option></select></label></div>
+    <p class="muted">El quiz mezcla preguntas base con preguntas creadas desde las guías procesadas.</p>
+    <button class="btn full" onclick="startQuiz()">Comenzar</button>
+  </div>
+  <div id="quizArea"></div>
+</section>
+
+<section id="semester" class="view">
+  <div class="heading"><button class="back" onclick="showView('home')">‹</button><div><p class="kicker">Organización</p><h2>Mi semestre</h2></div></div>
+  <div class="panel">
+    <p class="muted">Horario oficial II semestre 2026 · Jornada vespertina · Sede Angol.</p>
+    <div class="result"><strong>Jueves 18:50–19:30:</strong> horario protegido.</div>
+    <div id="semesterList"></div>
+  </div>
+</section>
+
+<section id="settings" class="view">
+  <div class="heading"><button class="back" onclick="showView('home')">‹</button><div><p class="kicker">Aplicación</p><h2>Ajustes</h2></div></div>
+
+  <div class="panel">
+    <h3>Valor del kWh</h3><p class="muted">El valor inicial es una referencia para Angol. Modifícalo cuando cambie la tarifa o uses otra ubicación.</p>
+    <div class="form3"><label>Ubicación<input id="setLocation"></label><label>Valor CLP/kWh<input id="setKwh" type="number" step="any"></label><label>Fuente / referencia<input id="setKwhSource"></label></div>
+    <button class="btn green full" onclick="saveTariff()">Guardar tarifa</button><div id="tariffSaved" class="result">—</div>
+  </div>
+
+  <div class="panel">
+    <h3>IA y procesamiento</h3>
+    <p class="muted">Gemini no funciona sin internet. Procesa las guías en Alex Electric Toolbox Online y luego descarga un nuevo paquete offline.</p>
+    <div id="aiStatusBox" class="result warn">Modo offline: IA no disponible.</div>
+  </div>
+
+  <div class="panel">
+    <h3>Normativa de referencia</h3>
+    <p class="note"><strong>Base técnica:</strong> normativa eléctrica chilena vigente. Las recomendaciones de instalaciones reales deben comprobarse con los Pliegos Técnicos RIC, complementos y disposiciones SEC que estén vigentes al momento del trabajo. Las calculadoras no reemplazan esa verificación.</p>
+    <button class="btn secondary" onclick="window.open('https://www.sec.cl/pliegos-tecnicos-ric/?view_full_site=true','_blank')">Abrir Pliegos RIC de SEC (requiere internet)</button>
+  </div>
+
+  <div class="panel owner-only">
+    <h3>Acceso del administrador</h3>
+    <p class="muted">Esta instalación offline es personal para Alex y no pide correo ni contraseña. Los usuarios compartidos siguen usando la versión online con sus propios accesos.</p>
+    <div class="result good">Administrador local activo.</div>
+  </div>
+
+  <div class="panel owner-only">
+    <h3>Actualizar contenido offline</h3>
+    <p class="muted">Cuando proceses nuevas guías en la versión online, descarga otro paquete y reemplaza el contenido de esta instalación.</p>
+    <label class="btn green full" style="margin:0;text-align:center">Importar nuevo paquete
+      <input type="file" accept=".json,application/json" style="display:none" onchange="importOfflinePackageFile(event)">
+    </label>
+    <div id="offlinePackageInfo" class="result">Contenido offline: —</div>
+  </div>
+
+  <div class="panel"><h3>Datos locales</h3><p class="muted">El progreso base, apuntes y datos del semestre siguen guardándose en este navegador. Guías, preguntas IA, historial de quiz y cubicaciones usan la planilla.</p><div class="btnrow"><button class="btn green" onclick="exportData()">Exportar respaldo local</button><label class="btn secondary" style="margin:0">Importar<input type="file" accept=".json,application/json" style="display:none" onchange="importData(event)"></label><button class="btn red" onclick="clearData()">Borrar datos locales</button></div></div>
+</section>
+</main>
+</div>
+
+<nav class="bottom">
+  <button class="nav active" data-view="home" onclick="showView('home')"><span>⌂</span><small>Inicio</small></button>
+  <button class="nav" data-view="calculators" onclick="openCalc('ohm')"><span>⚡</span><small>Calcular</small></button>
+  <button class="nav" data-view="study" onclick="showView('study')"><span>📚</span><small>Estudiar</small></button>
+  <button class="nav" data-view="quiz" onclick="showView('quiz')"><span>✓</span><small>Quiz</small></button>
+  <button class="nav" data-view="semester" onclick="showView('semester')"><span>🗓</span><small>Semestre</small></button>
+</nav>
+<div id="toast" class="toast"></div>
+
+<script src="./app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+ALEX ELECTRIC TOOLBOX OFFLINE V3.0
+
+QUÉ HACE
+- Abre sin internet después de la primera instalación.
+- Calculadoras disponibles offline.
+- Estudia resúmenes, conceptos, fórmulas y quiz ya descargados.
+- Guarda progreso y cubicaciones en el dispositivo.
+- No pide correo ni PIN al administrador.
+
+QUÉ NECESITA INTERNET
+- Gemini.
+- Procesar guías nuevas.
+- Subir/abrir archivos de Google Drive.
+- Actualizar contenido desde Google Sheets.
+
+CÓMO ACTUALIZAR LAS GUÍAS OFFLINE
+1. Abre Alex Electric Toolbox Online V2.9.
+2. Ajustes > Modo offline > Descargar contenido para modo offline.
+3. Obtendrás: alex-toolbox-offline-data.json.
+4. En la app Offline: Ajustes > Actualizar contenido offline > Importar nuevo paquete.
+
+INSTALACIÓN
+La carpeta debe publicarse en un hosting HTTPS estático para que el Service Worker pueda funcionar.
+Después:
+- iPhone: abrir en Safari > Compartir > Agregar a pantalla de inicio.
+- PC Chrome/Edge: abrir la web > Instalar aplicación.
+
+IMPORTANTE
+La primera apertura debe hacerse con internet para descargar y cachear los archivos de la app.
+Después de eso, la app puede abrir sin señal.

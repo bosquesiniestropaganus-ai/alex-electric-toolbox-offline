@@ -1,0 +1,22 @@
+SIGUIENTE PASO: PUBLICAR LA PWA
+
+Recomendación simple: GitHub Pages.
+
+1. Crea un repositorio llamado:
+   alex-electric-toolbox-offline
+2. Sube TODOS los archivos de esta carpeta, no solo index.html.
+3. En GitHub:
+   Settings > Pages
+4. Source:
+   Deploy from a branch
+5. Branch:
+   main / root
+6. Guarda.
+7. GitHub entregará una dirección HTTPS.
+8. Ábrela una vez con internet en tu PC e iPhone.
+9. iPhone Safari:
+   Compartir > Agregar a pantalla de inicio.
+10. PC Chrome/Edge:
+   Instalar aplicación.
+
+Después de instalarla y abrirla una vez, prueba activando modo avión.

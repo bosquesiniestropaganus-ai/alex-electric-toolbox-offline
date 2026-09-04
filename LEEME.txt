@@ -1,4 +1,4 @@
-ALEX ELECTRIC TOOLBOX OFFLINE V3.0
+ALEX ELECTRIC TOOLBOX OFFLINE V3.1
 
 QUÉ HACE
 - Abre sin internet después de la primera instalación.
@@ -28,3 +28,5 @@ Después:
 IMPORTANTE
 La primera apertura debe hacerse con internet para descargar y cachear los archivos de la app.
 Después de eso, la app puede abrir sin señal.
+
+V3.1: abre directamente sin pantalla de acceso. El paquete JSON es opcional para entrar y solo carga material de estudio.

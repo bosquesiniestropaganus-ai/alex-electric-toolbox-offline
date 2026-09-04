@@ -313,7 +313,7 @@ async function localRpc(name,...args){
           email:'bosquesiniestropaganus@gmail.com',
           name:'Alex Offline'
         },
-        version:'3.0.0-offline',
+        version:'3.1.0-offline',
         config:{
           location:String((offlinePackage.config||{}).location||'Angol'),
           kwh:Number((offlinePackage.config||{}).kwh||291),
@@ -1266,6 +1266,17 @@ async function importOfflinePackageFile(e){
     });
 
     await bootstrapAuthorized();
+
+    const homeInfo=document.getElementById('homeOfflineInfo');
+    if(homeInfo){
+      out(
+        'homeOfflineInfo',
+        `<strong>${data.guides.length} guía(s)</strong> y <strong>${data.questions.length} pregunta(s)</strong> disponibles offline.`,
+        'good'
+      );
+    }
+
+    showView('home');
     toast('Contenido offline actualizado');
 
   }catch(err){
@@ -1294,14 +1305,11 @@ async function bootstrap(){
     offlinePackage=await offlineDbGet('package');
 
     if(!offlinePackage){
-      setAccessUI({
-        authorized:false,
-        role:'guest',
-        email:''
-      });
-      return;
+      offlinePackage=emptyOfflinePackage();
+      await offlineDbSet('package',offlinePackage);
     }
 
+    // V3.1: entra directo como administrador local, sin correo ni PIN.
     setAccessUI({
       authorized:true,
       role:'owner',
@@ -1311,26 +1319,53 @@ async function bootstrap(){
 
     await bootstrapAuthorized();
 
-    const info=document.getElementById('offlinePackageInfo');
+    const guideCount=(offlinePackage.guides||[]).length;
+    const questionCount=(offlinePackage.questions||[]).length;
 
+    const info=document.getElementById('offlinePackageInfo');
     if(info){
       out(
         'offlinePackageInfo',
-        `<strong>${(offlinePackage.guides||[]).length} guía(s)</strong> · ${(offlinePackage.questions||[]).length} pregunta(s)<br><small>Exportado: ${esc(offlinePackage.exportedAt||'sin fecha')}</small>`,
-        'good'
+        guideCount
+          ? `<strong>${guideCount} guía(s)</strong> · ${questionCount} pregunta(s)<br><small>Exportado: ${esc(offlinePackage.exportedAt||'sin fecha')}</small>`
+          : 'Todavía no has importado contenido de estudio. Las calculadoras ya funcionan offline.',
+        guideCount ? 'good' : ''
+      );
+    }
+
+    const homeInfo=document.getElementById('homeOfflineInfo');
+    if(homeInfo){
+      out(
+        'homeOfflineInfo',
+        guideCount
+          ? `<strong>${guideCount} guía(s)</strong> y <strong>${questionCount} pregunta(s)</strong> disponibles offline.`
+          : 'Puedes usar las calculadoras inmediatamente. Importa <strong>alex-toolbox-offline-data.json</strong> para cargar tus guías y quiz.',
+        guideCount ? 'good' : ''
       );
     }
 
   }catch(e){
     console.error(e);
+
+    // Incluso si falla IndexedDB, mostramos la app para que las calculadoras
+    // sigan siendo utilizables.
+    offlinePackage=emptyOfflinePackage();
+
     setAccessUI({
-      authorized:false,
-      role:'guest',
-      email:''
+      authorized:true,
+      role:'owner',
+      email:'bosquesiniestropaganus@gmail.com',
+      name:'Alex Offline'
     });
-    out('offlineGateStatus',esc(e.message),'bad');
+
+    try{
+      await bootstrapAuthorized();
+    }catch(inner){
+      console.error(inner);
+    }
   }
 }
+
 
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{

@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-<div id="accessGate" class="access-gate">
+<div id="accessGate" class="access-gate hidden">
   <div class="access-card">
     <div class="access-brand"><div class="logo">⚡</div><div><h2>Alex Electric Toolbox Offline</h2><small>PC · iPhone · sin señal</small></div></div>
     <p>Esta versión no pide correo ni PIN. Importa el paquete descargado desde tu Alex Toolbox online para llevar tus guías, resúmenes y quiz al modo offline.</p>
@@ -20,7 +20,7 @@
       <input type="file" accept=".json,application/json" style="display:none" onchange="importOfflinePackageFile(event)">
     </label>
     <button class="btn secondary full" onclick="startOfflineEmpty()">Entrar solo con calculadoras</button>
-    <div id="offlineGateStatus" class="result access-status">Primera instalación: importa <strong>alex-toolbox-offline-data.json</strong>.</div>
+    <div id="offlineGateStatus" class="result access-status">Opcional: importa <strong>alex-toolbox-offline-data.json</strong> para cargar tus guías y quiz.</div>
   </div>
 </div>
 <div id="appShell class="shell hidden">
@@ -32,9 +32,15 @@
 <main>
 <section id="home" class="view active">
   <div class="hero">
-    <p class="kicker">Herramienta técnica personal · V3.0 OFFLINE</p>
+    <p class="kicker">Herramienta técnica personal · V3.1 OFFLINE</p>
     <h2>Calcula. Comprueba. Aprende.</h2>
     <p>Calculadoras y Centro de Estudios disponibles sin señal. Los resúmenes y quiz funcionan con el contenido que hayas descargado previamente desde la versión online.</p><div class="result good" style="margin-top:14px"><strong>Modo offline activo.</strong> Gemini, Drive y la sincronización requieren internet.</div>
+<div class="btnrow" style="margin-top:12px">
+  <label class="btn green" style="margin:0;text-align:center">Importar / actualizar contenido offline
+    <input type="file" accept=".json,application/json" style="display:none" onchange="importOfflinePackageFile(event)">
+  </label>
+</div>
+<div id="homeOfflineInfo" class="result" style="margin-top:10px">Puedes usar las calculadoras inmediatamente. Importa el archivo <strong>alex-toolbox-offline-data.json</strong> para cargar tus guías y quiz.</div>
   </div>
   <div class="stats">
     <div class="stat"><span>Calculadoras</span><strong>18+</strong><small>Herramientas</small></div>

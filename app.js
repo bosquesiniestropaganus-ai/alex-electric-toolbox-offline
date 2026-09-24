@@ -1,7 +1,7 @@
 const KEY='alexElectricToolboxV2';
 const LEGACY_KEY='alexElectricToolboxV1';
 const NORMATIVE_DOCS=Array.isArray(window.ALEX_NORMATIVA)?window.ALEX_NORMATIVA:[];
-const NORMATIVE_CACHE='alex-electric-toolbox-hybrid-v4-5-0';
+const NORMATIVE_CACHE='alex-electric-toolbox-hybrid-v4-5-1';
 
 const modules=[
 {id:'and',code:'TEAU03AND02',name:'ANÁLISIS DE CIRCUITOS ELECTRÓNICOS ANALÓGICOS Y DIGITALES',short:'Electrónica analógica y digital',icon:'🔬',topics:[['Semiconductores','Conductor, aislante, semiconductor y unión PN.'],['Diodos','Polarización directa/inversa y aplicaciones básicas.'],['Rectificación','Media onda, onda completa y filtrado.'],['Transistores','BJT/MOSFET como interruptor y amplificación básica.'],['Amplificador operacional','Entradas, salida, ganancia y realimentación.'],['Sistema binario','Bits y conversión decimal/binario.'],['Compuertas lógicas','AND, OR, NOT, NAND, NOR y XOR.'],['Circuitos combinacionales','Combinar compuertas para una función lógica.']],formulas:[['Ley de Ohm','V = I × R'],['Potencia DC','P = V × I'],['No inversor ideal','Av = 1 + Rf/Rg']]},

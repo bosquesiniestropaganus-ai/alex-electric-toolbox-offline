@@ -1,4 +1,4 @@
-const CACHE_NAME='alex-electric-toolbox-hybrid-v4-5-0';
+const CACHE_NAME='alex-electric-toolbox-hybrid-v4-5-1';
 const APP_SHELL=[
   './',
   './index.html',

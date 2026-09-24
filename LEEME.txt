@@ -1,32 +1,35 @@
-ALEX ELECTRIC TOOLBOX OFFLINE V3.1
+ALEX ELECTRIC TOOLBOX V4.5 HYBRID
 
-QUÉ HACE
-- Abre sin internet después de la primera instalación.
-- Calculadoras disponibles offline.
-- Estudia resúmenes, conceptos, fórmulas y quiz ya descargados.
-- Guarda progreso y cubicaciones en el dispositivo.
-- No pide correo ni PIN al administrador.
+UNA SOLA APP
+- Online: usa Apps Script, Google Sheets, Drive y OpenAI o Gemini.
+- Offline automático: conserva calculadoras, guías, resúmenes, fórmulas y quiz guardados.
+- Control manual: en Inicio puedes activar Online u Offline; en Ajustes puedes elegir Automático, Online u Offline.
+- Al volver internet: envía el progreso, las cubicaciones y los cambios pendientes.
+- La cuenta se conecta una vez y la sesión queda recordada en ese dispositivo.
+- El menú principal conserva 8 calculadoras esenciales; las secundarias siguen disponibles dentro de la app.
+- Incluye Kirchhoff, conductores/protecciones, empalme y mínimos de vivienda RIC.
+- Incluye Decreto 8, Resolución 33.877 y los 19 PDF RIC en la sección Normas.
+- Pulsa Descargar biblioteca offline para guardar los 22 documentos en cada dispositivo.
+- Las consultas normativas con IA requieren internet y OpenAI configurado.
 
-QUÉ NECESITA INTERNET
-- Gemini.
-- Procesar guías nuevas.
-- Subir/abrir archivos de Google Drive.
-- Actualizar contenido desde Google Sheets.
-
-CÓMO ACTUALIZAR LAS GUÍAS OFFLINE
-1. Abre Alex Electric Toolbox Online V2.9.
-2. Ajustes > Modo offline > Descargar contenido para modo offline.
-3. Obtendrás: alex-toolbox-offline-data.json.
-4. En la app Offline: Ajustes > Actualizar contenido offline > Importar nuevo paquete.
-
-INSTALACIÓN
-La carpeta debe publicarse en un hosting HTTPS estático para que el Service Worker pueda funcionar.
-Después:
-- iPhone: abrir en Safari > Compartir > Agregar a pantalla de inicio.
-- PC Chrome/Edge: abrir la web > Instalar aplicación.
+ORDEN DE INSTALACIÓN
+1. Actualiza primero Apps Script con los archivos de la carpeta apps-script.
+2. Implementa una versión nueva del mismo Web App.
+3. Sube a la raíz del repositorio GitHub los archivos de esta carpeta.
+4. Conserva el repositorio alex-electric-toolbox-offline para no perder la instalación ni los datos V3.
+5. Abre una vez la URL de GitHub Pages con internet.
 
 IMPORTANTE
-La primera apertura debe hacerse con internet para descargar y cachear los archivos de la app.
-Después de eso, la app puede abrir sin señal.
+- No abras index.html directamente para probar Online. Usa siempre la dirección de GitHub Pages.
 
-V3.1: abre directamente sin pantalla de acceso. El paquete JSON es opcional para entrar y solo carga material de estudio.
+MIGRACIÓN DESDE V3.1
+- Si reemplazas los archivos en el mismo repositorio, las guías y el progreso local se conservan.
+- La primera vez conecta tu correo y PIN desde Ajustes. Después no se vuelven a pedir mientras no borres los datos del sitio.
+- También puedes importar alex-toolbox-offline-data.json desde Ajustes > Copia local de estudio.
+
+NO SUBIR A GITHUB
+- Archivos con guías o datos personales.
+- alex-toolbox-offline-data.json.
+- Claves de OpenAI o Gemini, contraseñas o PIN.
+
+Consulta MIGRACION_E_INSTALACION.md para la guía completa.

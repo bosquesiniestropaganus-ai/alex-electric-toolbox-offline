@@ -1,5 +1,5 @@
 {
-  "name": "Alex Electric Toolbox Offline",
+  "name": "Alex Electric Toolbox V4 Hybrid",
   "short_name": "Alex Toolbox",
   "id": "./",
   "start_url": "./",
@@ -7,7 +7,7 @@
   "display": "standalone",
   "background_color": "#07111f",
   "theme_color": "#07111f",
-  "description": "Calculadoras eléctricas y Centro de Estudios offline de Alex Electric Toolbox.",
+  "description": "Calculadoras, ramos y normas eléctricas chilenas en una app online y offline.",
   "icons": [
     {
       "src": "./icon-192.png",

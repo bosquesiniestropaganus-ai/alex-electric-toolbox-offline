@@ -1,5 +1,7 @@
 const KEY='alexElectricToolboxV2';
 const LEGACY_KEY='alexElectricToolboxV1';
+const NORMATIVE_DOCS=Array.isArray(window.ALEX_NORMATIVA)?window.ALEX_NORMATIVA:[];
+const NORMATIVE_CACHE='alex-electric-toolbox-hybrid-v4-5-0';
 
 const modules=[
 {id:'and',code:'TEAU03AND02',name:'ANÁLISIS DE CIRCUITOS ELECTRÓNICOS ANALÓGICOS Y DIGITALES',short:'Electrónica analógica y digital',icon:'🔬',topics:[['Semiconductores','Conductor, aislante, semiconductor y unión PN.'],['Diodos','Polarización directa/inversa y aplicaciones básicas.'],['Rectificación','Media onda, onda completa y filtrado.'],['Transistores','BJT/MOSFET como interruptor y amplificación básica.'],['Amplificador operacional','Entradas, salida, ganancia y realimentación.'],['Sistema binario','Bits y conversión decimal/binario.'],['Compuertas lógicas','AND, OR, NOT, NAND, NOR y XOR.'],['Circuitos combinacionales','Combinar compuertas para una función lógica.']],formulas:[['Ley de Ohm','V = I × R'],['Potencia DC','P = V × I'],['No inversor ideal','Av = 1 + Rf/Rg']]},
@@ -62,11 +64,12 @@ const defaultSemester=Object.fromEntries(modules.map(m=>[m.id,{...professorData[
 
 let state=loadState();
 let activeModule=state.lastModule||'corr';
-let remote={access:{authorized:false,role:'guest',email:''},config:{location:'Angol',kwh:291,source:'Valor referencial',updated:'',normative:'SEC · RIC vigentes'},ai:{configured:false,model:''},guides:[],progress:{items:[],weakest:[]}};
+let activeNorm=state.lastNorm||'ric-10';
+let remote={access:{authorized:false,role:'guest',email:''},config:{location:'Angol',kwh:291,source:'Valor referencial',updated:'',normative:'SEC · RIC vigentes'},ai:{configured:false,provider:'gemini',providerLabel:'Gemini',model:'',providers:{}},guides:[],progress:{items:[],weakest:[]}};
 let quizState=null,currentGuideId='',areaSum=0,lastTakeoff=null;
 
 function loadState(){
-  let d={progress:{},notes:{},semester:{...defaultSemester},quizCorrect:0,quizTotal:0,lastModule:'corr',scheduleVersion:SCHEDULE_VERSION};
+  let d={progress:{},notes:{},semester:{...defaultSemester},quizCorrect:0,quizTotal:0,lastModule:'corr',lastNorm:'ric-10',normRead:{},normFavorites:{},normNotes:{},scheduleVersion:SCHEDULE_VERSION};
   try{
     const raw=localStorage.getItem(KEY)||localStorage.getItem(LEGACY_KEY);
     if(raw){
@@ -83,10 +86,10 @@ function loadState(){
             notes:old.notes||''
           };
         });
-        d={...d,...x,progress:{...(x.progress||{})},notes:{...(x.notes||{})},semester:migrated,scheduleVersion:SCHEDULE_VERSION};
+        d={...d,...x,progress:{...(x.progress||{})},notes:{...(x.notes||{})},normRead:{...(x.normRead||{})},normFavorites:{...(x.normFavorites||{})},normNotes:{...(x.normNotes||{})},semester:migrated,scheduleVersion:SCHEDULE_VERSION};
         localStorage.setItem(KEY,JSON.stringify(d));
       }else{
-        d={...d,...x,progress:{...(x.progress||{})},notes:{...(x.notes||{})},semester:{...defaultSemester,...(x.semester||{})},scheduleVersion:SCHEDULE_VERSION};
+        d={...d,...x,progress:{...(x.progress||{})},notes:{...(x.notes||{})},normRead:{...(x.normRead||{})},normFavorites:{...(x.normFavorites||{})},normNotes:{...(x.normNotes||{})},semester:{...defaultSemester,...(x.semester||{})},scheduleVersion:SCHEDULE_VERSION};
       }
     }
   }catch(e){}
@@ -101,17 +104,51 @@ function money(n){return '$'+Math.round(Number(n)||0).toLocaleString('es-CL')}
 function out(id,html,cls=''){const e=document.getElementById(id);if(!e)return;e.className='result '+cls;e.innerHTML=html}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),2600)}
 function clearIds(ids,result){ids.forEach(id=>document.getElementById(id).value='');out(result,'Resultado: —')}
-const ACCESS_TOKEN_KEY='aet_offline_owner_v3';
-const ACCESS_EMAIL_KEY='aet_offline_owner_email_v3';
+const ACCESS_TOKEN_KEY='aet_hybrid_access_token_v4';
+const ACCESS_EMAIL_KEY='aet_hybrid_access_email_v4';
+const CONNECTION_MODE_KEY='aet_hybrid_connection_mode_v4';
+const CONNECTION_MODES=new Set(['auto','online','offline']);
+const LEGACY_ACCESS_TOKEN_KEY='aet_offline_owner_v3';
 const OFFLINE_DB_NAME='AlexElectricToolboxOfflineV3';
 const OFFLINE_DB_VERSION=1;
 const OFFLINE_STORE='data';
-const OFFLINE_PROGRESS_KEY='aet_offline_progress_v3';
-const OFFLINE_QUIZ_HISTORY_KEY='aet_offline_quiz_history_v3';
-const OFFLINE_CUB_KEY='aet_offline_cubicaciones_v3';
+const OFFLINE_PROGRESS_KEY='aet_hybrid_unsynced_progress_v4';
+const OFFLINE_QUIZ_HISTORY_KEY='aet_hybrid_quiz_history_v4';
+const OFFLINE_CUB_KEY='aet_hybrid_cubicaciones_v4';
+const LEGACY_OFFLINE_PROGRESS_KEY='aet_offline_progress_v3';
+const LEGACY_OFFLINE_QUIZ_HISTORY_KEY='aet_offline_quiz_history_v3';
+const LEGACY_OFFLINE_CUB_KEY='aet_offline_cubicaciones_v3';
+const LEGACY_QUEUE_MIGRATION_KEY='aet_hybrid_v3_queue_migrated';
+const SYNC_QUEUE_DB_KEY='hybridSyncQueue';
+const SYNC_QUEUE_FALLBACK_KEY='aet_hybrid_sync_queue_v4';
+const HYBRID_CONFIG=window.ALEX_HYBRID_CONFIG||{};
+const BACKEND_URL=String(HYBRID_CONFIG.backendUrl||'').replace(/\/$/,'');
+const PUBLISHED_APP_URL=String(HYBRID_CONFIG.appUrl||'https://bosquesiniestropaganus-ai.github.io/alex-electric-toolbox-offline/');
+const IS_LOCAL_FILE=location.protocol==='file:';
+const BRIDGE_TIMEOUT_MS=Math.max(8000,Number(HYBRID_CONFIG.bridgeTimeoutMs||45000));
+const ONLINE_ONLY_METHODS=new Set([
+  'addAuthorizedUser','analyzeGuide','clearGeminiApiKey','clearOpenAIApiKey','deleteGuide',
+  'exportOfflinePackage','listAuthorizedUsers','processModuleGuides',
+  'removeAuthorizedUser','saveGeminiApiKey','saveOpenAIApiKey','setAiProvider',
+  'testGeminiConnection','testOpenAIConnection','getAiProviderStatus',
+  'uploadStudyFile','askGuide','askNormativa'
+]);
+const QUEUEABLE_METHODS=new Set(['recordQuizResult','saveCubicacion','saveEnergySettings']);
+const LONG_RUNNING_METHODS=new Set(['analyzeGuide','processModuleGuides','summarizeModule','askGuide','askNormativa','testOpenAIConnection','uploadStudyFile']);
 
-let accessToken='offline-owner';
+let accessToken=localStorage.getItem(ACCESS_TOKEN_KEY)||'';
 let offlinePackage=null;
+let hybrid={
+  bridgeReady:false,
+  backendReachable:false,
+  checking:true,
+  syncing:false,
+  connectionMode:CONNECTION_MODES.has(localStorage.getItem(CONNECTION_MODE_KEY))?localStorage.getItem(CONNECTION_MODE_KEY):'auto',
+  pending:new Map(),
+  channelId:'',
+  lastOnlineAt:'',
+  lastError:''
+};
 
 function openOfflineDb(){
   return new Promise((resolve,reject)=>{
@@ -151,11 +188,392 @@ async function offlineDbSet(key,value){
   });
 }
 
+function migrateLegacyLocalData(){
+  const pairs=[
+    [LEGACY_OFFLINE_PROGRESS_KEY,OFFLINE_PROGRESS_KEY],
+    [LEGACY_OFFLINE_QUIZ_HISTORY_KEY,OFFLINE_QUIZ_HISTORY_KEY],
+    [LEGACY_OFFLINE_CUB_KEY,OFFLINE_CUB_KEY]
+  ];
+  pairs.forEach(([oldKey,newKey])=>{
+    if(localStorage.getItem(newKey)===null&&localStorage.getItem(oldKey)!==null){
+      localStorage.setItem(newKey,localStorage.getItem(oldKey));
+    }
+  });
+}
+
+async function migrateLegacySyncQueue(){
+  if(localStorage.getItem(LEGACY_QUEUE_MIGRATION_KEY)==='1')return;
+  let history=[];
+  let cubicaciones=[];
+  try{history=JSON.parse(localStorage.getItem(LEGACY_OFFLINE_QUIZ_HISTORY_KEY)||'[]')}catch(e){}
+  try{cubicaciones=JSON.parse(localStorage.getItem(LEGACY_OFFLINE_CUB_KEY)||'[]')}catch(e){}
+  const queue=await getSyncQueue();
+  history.forEach(item=>{
+    const payload={...item};
+    delete payload.at;
+    queue.push({
+      id:makeEventId(),
+      method:'recordQuizResult',
+      args:[payload],
+      createdAt:String(item.at||new Date().toISOString())
+    });
+  });
+  cubicaciones.forEach(item=>{
+    const payload={...item};
+    delete payload.createdAt;
+    queue.push({
+      id:makeEventId(),
+      method:'saveCubicacion',
+      args:[payload],
+      createdAt:String(item.createdAt||new Date().toISOString())
+    });
+  });
+  await saveSyncQueue(queue.slice(-1000));
+  localStorage.setItem(LEGACY_QUEUE_MIGRATION_KEY,'1');
+}
+
+function makeEventId(){
+  if(globalThis.crypto&&typeof globalThis.crypto.randomUUID==='function')return globalThis.crypto.randomUUID();
+  return 'evt-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+}
+
+async function getSyncQueue(){
+  let fallback=[];
+  try{
+    const saved=JSON.parse(localStorage.getItem(SYNC_QUEUE_FALLBACK_KEY)||'[]');
+    fallback=Array.isArray(saved)?saved:[];
+  }catch(ignore){}
+  try{
+    const queue=await offlineDbGet(SYNC_QUEUE_DB_KEY);
+    const stored=Array.isArray(queue)?queue:[];
+    return stored.length?stored:fallback;
+  }catch(e){
+    return fallback;
+  }
+}
+
+async function saveSyncQueue(queue){
+  const safeQueue=Array.isArray(queue)?queue:[];
+  try{
+    await offlineDbSet(SYNC_QUEUE_DB_KEY,safeQueue);
+    localStorage.removeItem(SYNC_QUEUE_FALLBACK_KEY);
+  }catch(e){
+    localStorage.setItem(SYNC_QUEUE_FALLBACK_KEY,JSON.stringify(safeQueue));
+  }
+  updateSyncUi(safeQueue.length);
+}
+
+async function enqueueSyncEvent(method,args){
+  const queue=await getSyncQueue();
+  const event={id:makeEventId(),method,args,createdAt:new Date().toISOString()};
+  queue.push(event);
+  await saveSyncQueue(queue.slice(-1000));
+  return event;
+}
+
+function bridgeMessageError(value){
+  if(value&&typeof value==='object')return String(value.message||value.error||'El backend no respondió correctamente.');
+  return String(value||'El backend no respondió correctamente.');
+}
+
+function bridgeCall(method,args=[],timeoutMs=BRIDGE_TIMEOUT_MS){
+  if(!hybrid.bridgeReady) return Promise.reject(new Error('El backend todavía no está disponible.'));
+  const id=makeEventId();
+  return new Promise((resolve,reject)=>{
+    const frame=document.createElement('iframe');
+    const frameName='alex-hybrid-'+id.replace(/[^a-zA-Z0-9_-]/g,'');
+    frame.name=frameName;
+    frame.className='backend-bridge';
+    frame.title='Conexión segura con Apps Script';
+    frame.setAttribute('aria-hidden','true');
+
+    const form=document.createElement('form');
+    form.method='POST';
+    form.enctype='multipart/form-data';
+    form.action=BACKEND_URL;
+    form.target=frameName;
+    form.className='backend-form';
+
+    const bridgeField=document.createElement('input');
+    bridgeField.type='hidden';
+    bridgeField.name='hybridBridge';
+    bridgeField.value='1';
+
+    const payloadField=document.createElement('input');
+    payloadField.type='hidden';
+    payloadField.name='payload';
+    payloadField.value=JSON.stringify({
+      type:'alex-toolbox-rpc-request',
+      channelId:hybrid.channelId,
+      id,
+      method,
+      args,
+      origin:location.origin
+    });
+
+    form.append(bridgeField,payloadField);
+    document.body.append(frame,form);
+
+    const timer=setTimeout(()=>{
+      frame.remove();
+      form.remove();
+      hybrid.pending.delete(id);
+      reject(new Error('El backend tardó demasiado en responder.'));
+    },timeoutMs);
+    hybrid.pending.set(id,{resolve,reject,timer,frame});
+    form.submit();
+    setTimeout(()=>form.remove(),0);
+  });
+}
+
+function rejectBridgePending(message){
+  for(const [id,pending] of hybrid.pending){
+    clearTimeout(pending.timer);
+    if(pending.frame)pending.frame.remove();
+    pending.reject(new Error(message));
+    hybrid.pending.delete(id);
+  }
+}
+
+function updateSyncUi(forcedCount){
+  const apply=count=>{
+    const box=document.getElementById('syncStatus');
+    const button=document.getElementById('syncNowBtn');
+    const text=hybrid.syncing
+      ? 'Sincronizando cambios…'
+      : count
+        ? `${count} cambio(s) pendiente(s) de sincronizar.`
+        : 'Todo el progreso está sincronizado.';
+    if(box){
+      box.textContent=text;
+      box.className='result '+(count?'warn':'good');
+    }
+    if(button){
+      button.textContent=hybrid.syncing?'Sincronizando…':count?`Sincronizar (${count})`:'Sincronizado';
+      button.disabled=hybrid.syncing||!hybrid.backendReachable||!accessToken||count===0;
+    }
+  };
+  if(Number.isFinite(forcedCount))return apply(forcedCount);
+  getSyncQueue().then(queue=>apply(queue.length)).catch(()=>apply(0));
+}
+
+function renderAccountState(){
+  const connected=!!accessToken;
+  const disconnected=document.getElementById('accountDisconnected');
+  const connectedBox=document.getElementById('accountConnected');
+  if(disconnected)disconnected.classList.toggle('hidden',connected);
+  if(connectedBox)connectedBox.classList.toggle('hidden',!connected);
+  const email=localStorage.getItem(ACCESS_EMAIL_KEY)||remote.access.email||'';
+  const accountStatus=document.getElementById('accountStatus');
+  if(accountStatus){
+    accountStatus.innerHTML=connected
+      ? `<strong>${esc(email||'Cuenta conectada')}</strong><br><small>La sesión se recordará en este dispositivo.</small>`
+      : 'Trabajando solo con los datos guardados en este dispositivo.';
+  }
+  const settingsEmail=document.getElementById('settingsAccessEmail');
+  if(settingsEmail&&!settingsEmail.value)settingsEmail.value=email;
+}
+
+function renderConnectionControls(){
+  document.querySelectorAll('[data-connection-mode]').forEach(button=>{
+    const active=button.dataset.connectionMode===hybrid.connectionMode;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-pressed',active?'true':'false');
+  });
+
+  const toggle=document.getElementById('modeToggleBtn');
+  if(toggle){
+    toggle.textContent=IS_LOCAL_FILE
+      ? 'Abrir app online'
+      : hybrid.connectionMode==='offline'
+      ? 'Activar online'
+      : 'Activar offline';
+  }
+
+  const status=document.getElementById('connectionModeStatus');
+  if(!status)return;
+  if(hybrid.connectionMode==='offline'){
+    status.className='result warn';
+    status.innerHTML='<strong>Offline activo.</strong> Toca Online cuando quieras conectarte.';
+    return;
+  }
+  if(IS_LOCAL_FILE){
+    status.className='result bad';
+    status.innerHTML='<strong>Esta es una vista local.</strong> Para conectarte a Apps Script debes abrir la app publicada.<div style="margin-top:9px"><button class="btn green compact" onclick="openPublishedApp()">Abrir app online</button></div>';
+    return;
+  }
+  if(hybrid.connectionMode==='online'){
+    status.className='result '+(hybrid.backendReachable?'good':'bad');
+    status.innerHTML=hybrid.backendReachable
+      ? '<strong>Online activo.</strong>'
+      : navigator.onLine
+        ? '<strong>No respondió el servidor.</strong> Toca Online para reintentar.'
+        : '<strong>Sin internet.</strong> Tus datos siguen guardados.';
+    return;
+  }
+  status.className='result '+(hybrid.backendReachable?'good':'warn');
+  status.innerHTML=hybrid.backendReachable
+    ? '<strong>Automático · Online</strong>'
+    : '<strong>Automático · Offline</strong>';
+}
+
+async function setConnectionMode(mode){
+  if(!CONNECTION_MODES.has(mode))return false;
+  hybrid.connectionMode=mode;
+  localStorage.setItem(CONNECTION_MODE_KEY,mode);
+  renderConnectionControls();
+
+  if(mode==='offline'){
+    rejectBridgePending('Modo offline activado manualmente.');
+    setBackendState(false,'Modo offline activado manualmente.');
+    toast('Modo offline manual activado');
+    return true;
+  }
+
+  toast(mode==='online'?'Intentando activar el modo online…':'Modo automático activado');
+  const available=await probeBackend();
+  if(mode==='online'){
+    toast(available?'Modo online activado':'No fue posible conectar. Tus datos siguen seguros offline.');
+  }
+  return available;
+}
+
+function toggleManualConnection(){
+  if(IS_LOCAL_FILE)return openPublishedApp();
+  return setConnectionMode(hybrid.connectionMode==='offline'?'online':'offline');
+}
+
+function openPublishedApp(){
+  location.href=PUBLISHED_APP_URL;
+}
+
+function setBackendState(reachable,error=''){
+  hybrid.backendReachable=!!reachable;
+  hybrid.checking=false;
+  hybrid.lastError=String(error||'');
+  if(reachable)hybrid.lastOnlineAt=new Date().toISOString();
+  document.body.classList.toggle('is-online',!!reachable);
+  document.body.classList.toggle('is-offline',!reachable);
+
+  const badge=document.getElementById('connectionBadge');
+  const label=document.getElementById('connectionLabel');
+  const banner=document.getElementById('modeBanner');
+  const offline=!navigator.onLine;
+  const localFile=IS_LOCAL_FILE;
+  const manualOffline=hybrid.connectionMode==='offline';
+  const manualOnline=hybrid.connectionMode==='online';
+  const connected=!!accessToken;
+  document.body.classList.toggle('has-online-session',!!reachable&&connected);
+  const stateClass=reachable?'is-online':manualOffline||offline?'is-offline':'is-backend-down';
+  const stateLabel=reachable
+    ? manualOnline?'Online manual':connected?'Online':'Online · modo local'
+    : manualOffline?'Offline manual':localFile?'Vista local':offline?'Offline · sin internet':manualOnline?'Online sin respuesta':'Backend sin respuesta';
+  if(badge){badge.className='connection-badge '+stateClass;badge.title=error||stateLabel;badge.setAttribute('aria-label',manualOffline?'Activar modo online':'Activar modo offline')}
+  if(label)label.textContent=stateLabel;
+  if(banner){
+    banner.className='mode-banner '+stateClass;
+    const strong=banner.querySelector('strong');
+    const small=banner.querySelector('small');
+    const icon=banner.querySelector('.mode-icon');
+    if(strong)strong.textContent=reachable
+      ? 'Online activo'
+      : manualOffline?'Offline activo':localFile?'Abre la app publicada':offline?'Offline activo':'Servidor sin respuesta';
+    if(small)small.textContent=reachable
+      ? connected?'Sincronización e IA disponibles.':'Conecta tu cuenta para usar IA y sincronización.'
+      : manualOffline?'Toca “Activar online” para volver.':localFile?'Usa el enlace publicado.':offline?'La app sigue funcionando sin señal.':'Tus datos siguen disponibles.';
+    if(icon)icon.textContent=reachable?'●':'↓';
+  }
+  const notice=document.getElementById('studyModeNotice');
+  if(notice){
+    notice.className='result '+(reachable?'good':'warn');
+    notice.innerHTML=reachable
+      ? '<strong>Online:</strong> puedes subir, procesar y actualizar las guías. La copia offline se renueva automáticamente.'
+      : manualOffline
+        ? '<strong>Offline manual:</strong> puedes estudiar las guías guardadas y continuar los quiz. Elige Online para sincronizar.'
+        : '<strong>Offline:</strong> puedes estudiar las guías guardadas y continuar los quiz. El progreso queda pendiente de sincronización.';
+  }
+  renderConnectionControls();
+  renderAiStatus();
+  renderAccountState();
+  updateSyncUi();
+}
+
+async function probeBackend(){
+  if(hybrid.connectionMode==='offline'){
+    setBackendState(false,'Modo offline activado manualmente.');
+    return false;
+  }
+  if(IS_LOCAL_FILE){
+    setBackendState(false,'Abre la dirección publicada de GitHub Pages para usar el modo online.');
+    return false;
+  }
+  if(!navigator.onLine||!hybrid.bridgeReady){
+    setBackendState(false,!navigator.onLine?'Sin conexión a internet.':'El puente de Apps Script no respondió.');
+    return false;
+  }
+  try{
+    const pong=await bridgeCall('hybridPing',[],10000);
+    if(!pong||pong.ok!==true)throw new Error('Respuesta de salud no válida.');
+    setBackendState(true);
+    await restoreOnlineSession();
+    return true;
+  }catch(e){
+    setBackendState(false,e.message);
+    return false;
+  }
+}
+
+function initBackendBridge(){
+  if(!BACKEND_URL){
+    setBackendState(false,'Falta configurar la URL de Apps Script en config.js.');
+    return;
+  }
+  hybrid.channelId=makeEventId();
+  hybrid.bridgeReady=true;
+  probeBackend();
+}
+
+function isTrustedBridgeOrigin(origin){
+  try{
+    const host=new URL(origin).hostname.toLowerCase();
+    return host==='script.google.com'||host==='script.googleusercontent.com'||host.endsWith('-script.googleusercontent.com');
+  }catch(e){
+    return false;
+  }
+}
+
+window.addEventListener('message',event=>{
+  const data=event.data||{};
+  if(data.channelId!==hybrid.channelId)return;
+  if(!isTrustedBridgeOrigin(event.origin))return;
+  if(data.type!=='alex-toolbox-rpc-response')return;
+  const pending=hybrid.pending.get(data.id);
+  if(!pending)return;
+  clearTimeout(pending.timer);
+  if(pending.frame)pending.frame.remove();
+  hybrid.pending.delete(data.id);
+  if(data.ok)pending.resolve(data.result);
+  else{
+    const error=new Error(bridgeMessageError(data.error));
+    error.isRemoteApplicationError=true;
+    pending.reject(error);
+  }
+});
+
+window.addEventListener('online',()=>{
+  if(hybrid.connectionMode==='offline')setBackendState(false,'Modo offline activado manualmente.');
+  else probeBackend();
+});
+window.addEventListener('offline',()=>{
+  rejectBridgePending('Se perdió la conexión a internet.');
+  setBackendState(false,'Sin conexión a internet.');
+});
+
 function emptyOfflinePackage(){
   return {
     format:'alex-electric-toolbox-offline',
     schemaVersion:1,
-    appVersion:'3.0-offline',
+    appVersion:'4.2-hybrid',
     exportedAt:'',
     config:{
       location:'Angol',
@@ -310,10 +728,10 @@ async function localRpc(name,...args){
         access:{
           authorized:true,
           role:'owner',
-          email:'bosquesiniestropaganus@gmail.com',
-          name:'Alex Offline'
+          email:'',
+          name:'Modo local'
         },
-        version:'3.1.0-offline',
+        version:'4.2.0-hybrid-local',
         config:{
           location:String((offlinePackage.config||{}).location||'Angol'),
           kwh:Number((offlinePackage.config||{}).kwh||291),
@@ -322,7 +740,7 @@ async function localRpc(name,...args){
           normative:String((offlinePackage.config||{}).normative||'SEC · RIC vigentes'),
           aiModel:'offline'
         },
-        ai:{configured:false,model:'offline'},
+        ai:{configured:false,provider:'offline',providerLabel:'IA offline',model:'offline',providers:{}},
         guides:(offlinePackage.guides||[]).map(g=>({...g,fileId:'',url:''})),
         generatedQuestions:(offlinePackage.questions||[]).length,
         quizRecords:JSON.parse(localStorage.getItem(OFFLINE_QUIZ_HISTORY_KEY)||'[]').length,
@@ -450,19 +868,199 @@ async function localRpc(name,...args){
     case 'askGuide':
     case 'addAuthorizedUser':
     case 'removeAuthorizedUser':
-      throw new Error('Esta función requiere internet. Usa Alex Electric Toolbox Online.');
+      throw new Error('Esta función requiere conexión con Apps Script. Se activará al volver el modo online.');
 
     default:
       throw new Error('Función no disponible en modo offline: '+name);
   }
 }
 
-function rawRpc(name,...args){
+async function markLocalQuizSynced(payload){
+  const map=offlineProgressMap();
+  const key=String(payload.moduleId||'')+'|'+String(payload.topic||'General');
+  const item=map[key];
+  if(!item)return;
+  item.attempts=Math.max(0,Number(item.attempts||0)-1);
+  if(payload.correct)item.correct=Math.max(0,Number(item.correct||0)-1);
+  else item.incorrect=Math.max(0,Number(item.incorrect||0)-1);
+  if(item.attempts===0)delete map[key];
+  else map[key]=item;
+  localStorage.setItem(OFFLINE_PROGRESS_KEY,JSON.stringify(map));
+}
+
+async function rawRpc(name,...args){
+  if(hybrid.connectionMode==='offline'){
+    throw new Error('El modo offline está activado manualmente. Elige Online o Automático para conectar Apps Script.');
+  }
+  if(!hybrid.backendReachable||!hybrid.bridgeReady){
+    throw new Error(navigator.onLine?'Apps Script no está respondiendo.':'No hay conexión a internet.');
+  }
+  try{
+    return await bridgeCall(name,args);
+  }catch(e){
+    if(!e.isRemoteApplicationError)setBackendState(false,e.message);
+    throw e;
+  }
+}
+
+async function rpc(name,...args){
+  if(QUEUEABLE_METHODS.has(name)){
+    const localResult=await localRpc(name,...args);
+    const event=await enqueueSyncEvent(name,args);
+    if(hybrid.backendReachable&&accessToken){
+      try{
+        const serverResult=await bridgeCall('hybridApplySyncEvent',[accessToken,event]);
+        let queue=await getSyncQueue();
+        queue=queue.filter(item=>item.id!==event.id);
+        await saveSyncQueue(queue);
+        if(name==='recordQuizResult')await markLocalQuizSynced(args[0]||{});
+        return (serverResult&&serverResult.result)||serverResult||localResult;
+      }catch(e){
+        const lower=String(e.message||'').toLowerCase();
+        if(lower.includes('sesión vencida')||lower.includes('no autorizada')||lower.includes('no autorizado'))forgetOnlineSession(false);
+        else if(!e.isRemoteApplicationError)setBackendState(false,e.message);
+      }
+    }
+    return {...(localResult||{}),queued:true};
+  }
+
+  if(hybrid.backendReachable&&accessToken){
+    try{
+      return await bridgeCall(name,[accessToken,...args],LONG_RUNNING_METHODS.has(name)?300000:BRIDGE_TIMEOUT_MS);
+    }catch(e){
+      const lower=String(e.message||'').toLowerCase();
+      if(lower.includes('sesión vencida')||lower.includes('no autorizada')||lower.includes('no autorizado')){
+        forgetOnlineSession(false);
+      }else if(!e.isRemoteApplicationError){
+        setBackendState(false,e.message);
+      }
+      if(e.isRemoteApplicationError||ONLINE_ONLY_METHODS.has(name))throw e;
+    }
+  }
+
   return localRpc(name,...args);
 }
 
-function rpc(name,...args){
-  return localRpc(name,...args);
+async function flushSyncQueue(showToast=false){
+  if(hybrid.syncing)return false;
+  if(hybrid.connectionMode==='offline'){
+    if(showToast)toast('Activa Online o Automático para sincronizar.');
+    updateSyncUi();
+    return false;
+  }
+  if(!hybrid.backendReachable||!accessToken){
+    if(showToast)toast(accessToken?'El backend todavía no está disponible.':'Conecta tu cuenta para sincronizar.');
+    updateSyncUi();
+    return false;
+  }
+  hybrid.syncing=true;
+  let queue=await getSyncQueue();
+  updateSyncUi(queue.length);
+  let sent=0;
+  try{
+    for(const event of [...queue]){
+      await bridgeCall('hybridApplySyncEvent',[accessToken,event]);
+      queue=queue.filter(item=>item.id!==event.id);
+      await saveSyncQueue(queue);
+      if(event.method==='recordQuizResult')await markLocalQuizSynced((event.args||[])[0]||{});
+      sent++;
+    }
+    if(showToast)toast(sent?`${sent} cambio(s) sincronizado(s)`:'No había cambios pendientes');
+    return true;
+  }catch(e){
+    const lower=String(e.message||'').toLowerCase();
+    if(lower.includes('sesión vencida')||lower.includes('no autorizada')||lower.includes('no autorizado'))forgetOnlineSession(false);
+    else if(!e.isRemoteApplicationError)setBackendState(false,e.message);
+    if(showToast)toast('La sincronización continuará cuando vuelva el backend.');
+    return false;
+  }finally{
+    hybrid.syncing=false;
+    updateSyncUi(queue.length);
+  }
+}
+
+async function syncNow(){
+  if(hybrid.connectionMode==='offline'){
+    return toast('Activa Online o Automático para sincronizar.');
+  }
+  if(!hybrid.backendReachable){
+    const ok=await probeBackend();
+    if(!ok)return toast('Seguimos en modo offline.');
+  }
+  await flushSyncQueue(true);
+  if(accessToken)await refreshOfflineCache(false);
+}
+
+async function refreshOfflineCache(showToast=false){
+  if(hybrid.connectionMode==='offline'){
+    if(showToast)toast('Activa Online o Automático para actualizar la copia.');
+    return false;
+  }
+  if(!hybrid.backendReachable||!accessToken){
+    if(showToast)toast('Conecta la cuenta y comprueba internet.');
+    return false;
+  }
+  try{
+    const data=await bridgeCall('exportOfflinePackage',[accessToken],120000);
+    if(!data||data.format!=='alex-electric-toolbox-offline'||!Array.isArray(data.guides)||!Array.isArray(data.knowledge)||!Array.isArray(data.questions)){
+      throw new Error('El backend devolvió una copia offline no válida.');
+    }
+    data.appVersion='4.2-hybrid';
+    offlinePackage=data;
+    await offlineDbSet('package',data);
+    const info=document.getElementById('offlinePackageInfo');
+    if(info)out('offlinePackageInfo',`<strong>${data.guides.length} guía(s)</strong> · ${data.questions.length} pregunta(s)<br><small>Actualizado: ${esc(data.exportedAt||new Date().toISOString())}</small>`,'good');
+    const homeInfo=document.getElementById('homeOfflineInfo');
+    if(homeInfo)out('homeOfflineInfo',`<strong>${data.guides.length} guía(s)</strong> y <strong>${data.questions.length} pregunta(s)</strong> guardadas para trabajar sin conexión.`,'good');
+    if(showToast)toast('Copia offline actualizada');
+    return true;
+  }catch(e){
+    if(showToast)toast(e.message);
+    return false;
+  }
+}
+
+function forgetOnlineSession(showMessage=true){
+  accessToken='';
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  renderAccountState();
+  document.body.classList.remove('has-online-session');
+  if(hybrid.backendReachable)setBackendState(true);
+  if(showMessage)toast('Este dispositivo quedó en modo local.');
+}
+
+async function refreshAiProviderStatus(){
+  if(!hybrid.backendReachable||!accessToken)return remote.ai;
+  try{
+    const status=await bridgeCall('getAiProviderStatus',[accessToken]);
+    if(status&&typeof status==='object')remote.ai=status;
+  }catch(e){
+    console.warn('Estado IA:',e);
+  }
+  return remote.ai;
+}
+
+async function restoreOnlineSession(){
+  renderAccountState();
+  if(!accessToken)return;
+  try{
+    const data=await bridgeCall('getBootstrapData',[accessToken]);
+    remote={...remote,...data,access:data.access||remote.access};
+    await refreshAiProviderStatus();
+    setAccessUI(remote.access);
+    applyRemoteConfig();renderStats();renderAiStatus();renderGuides();
+    await flushSyncQueue(false);
+    await refreshOfflineCache(false);
+  }catch(e){
+    const lower=String(e.message||'').toLowerCase();
+    if(lower.includes('sesión vencida')||lower.includes('no autorizada')||lower.includes('no autorizado')){
+      forgetOnlineSession(false);
+      setAccessUI({authorized:true,role:'owner',email:'',name:'Modo local'});
+      toast('La sesión online venció. Conéctala otra vez en Ajustes.');
+    }else{
+      setBackendState(false,e.message);
+    }
+  }
 }
 
 function setAccessUI(access){
@@ -491,6 +1089,10 @@ async function loginAccess(){
   out('accessStatus','<span class="loader"></span> Verificando acceso…');
 
   try{
+    if(!hybrid.backendReachable){
+      const available=await probeBackend();
+      if(!available)throw new Error('Apps Script no está disponible. Puedes continuar en modo local.');
+    }
     const access=await rawRpc('authorizeAccess',email,pin);
 
     if(!access||!access.authorized||!access.token){
@@ -499,18 +1101,49 @@ async function loginAccess(){
 
     accessToken=access.token;
     localStorage.setItem(ACCESS_TOKEN_KEY,accessToken);
+    localStorage.setItem(ACCESS_EMAIL_KEY,email);
 
     document.getElementById('accessPin').value='';
     setAccessUI(access);
     await bootstrapAuthorized();
+    await flushSyncQueue(false);
+    await refreshOfflineCache(false);
+    renderAccountState();
+    toast('Cuenta conectada en este dispositivo');
+    return true;
 
   }catch(e){
     accessToken='';
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     out('accessStatus',esc(e.message),'bad');
+    return false;
 
   }finally{
     setBusy(btn,false);
+  }
+}
+
+async function loginFromSettings(){
+  const email=document.getElementById('settingsAccessEmail').value.trim().toLowerCase();
+  const pin=document.getElementById('settingsAccessPin').value.trim();
+  const accessEmail=document.getElementById('accessEmail');
+  const accessPin=document.getElementById('accessPin');
+  const accessBtn=document.getElementById('accessBtn');
+  if(accessEmail)accessEmail.value=email;
+  if(accessPin)accessPin.value=pin;
+  const settingsBtn=document.getElementById('settingsAccessBtn');
+  setBusy(settingsBtn,true,'Conectando…');
+  try{
+    const ok=await loginAccess();
+    if(ok){
+      document.getElementById('settingsAccessPin').value='';
+      renderSettings();
+    }else{
+      toast('No se pudo conectar la cuenta.');
+    }
+  }finally{
+    setBusy(settingsBtn,false);
+    if(accessBtn)accessBtn.disabled=false;
   }
 }
 
@@ -611,6 +1244,7 @@ function showView(id){
   document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id===id));
   document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.view===id));
   if(id==='study'){renderStudy();renderGuides()}
+  if(id==='normativa')renderNormativa();
   if(id==='semester')renderSemester();
   if(id==='settings')renderSettings();
   window.scrollTo({top:0,behavior:'smooth'});
@@ -620,7 +1254,7 @@ function openCalc(name){
   showView('calculators');
   document.querySelectorAll('.calc-panel').forEach(x=>x.style.display=x.id==='calc-'+name?'block':'none');
   document.querySelectorAll('#calcTabs .tab').forEach(x=>x.classList.toggle('active',x.dataset.calc===name));
-  const names={ohm:'Ley de Ohm',power:'Potencia AC',resistors:'Resistencias',divider:'Divisores',energy:'Consumo y costo',area:'Metros cuadrados',takeoff:'Cubicación eléctrica',drop:'Caída de tensión',concentric:'Cuadro de carga + cable concéntrico',rlc:'RLC en CA',transformer:'Transformador',awg:'AWG ↔ mm²',frequency:'Frecuencia',motor:'Motor',pf:'Factor de potencia'};
+  const names={ohm:'Ley de Ohm',power:'Potencia y Ley de Watt',kirchhoff:'Leyes de Kirchhoff',concentric:'Cuadro de carga',conductors:'Conductores y protección',takeoff:'Cubicación eléctrica',empalme:'Empalme y cable concéntrico','ric-home':'Vivienda RIC',resistors:'Resistencias',divider:'Divisores',energy:'Consumo y costo',area:'Metros cuadrados',drop:'Caída de tensión',rlc:'RLC en CA',transformer:'Transformador',awg:'AWG ↔ mm²',frequency:'Frecuencia',motor:'Motor',pf:'Factor de potencia'};
   document.getElementById('calcTitle').textContent=names[name]||'Herramientas eléctricas';
 }
 document.getElementById('calcTabs').addEventListener('click',e=>{const b=e.target.closest('[data-calc]');if(b)openCalc(b.dataset.calc)});
@@ -641,6 +1275,35 @@ function calcPower(){
   if(!good(V,I,pf)||V<=0||I<0||pf<=0||pf>1)return out('pResult','Revisa V, I y factor de potencia (0–1).','bad');
   const S=(ph==='3'?Math.sqrt(3):1)*V*I,P=S*pf,Q=Math.sqrt(Math.max(0,S*S-P*P));
   out('pResult',`<strong>P:</strong> ${f(P/1000)} kW<br><strong>S:</strong> ${f(S/1000)} kVA · <strong>Q:</strong> ${f(Q/1000)} kVAr`,'good')
+}
+
+function parsePositiveList(id){
+  return String(document.getElementById(id).value||'')
+    .split(/[,;\s]+/)
+    .map(x=>Number(x.replace(',','.')))
+    .filter(x=>Number.isFinite(x)&&x>=0);
+}
+
+function calcKirchhoffCurrent(){
+  const incoming=parsePositiveList('kclIn'),outgoing=parsePositiveList('kclOut');
+  if(!incoming.length&&!outgoing.length)return out('kclResult','Ingresa al menos una corriente conocida.','bad');
+  const sumIn=incoming.reduce((s,x)=>s+x,0),sumOut=outgoing.reduce((s,x)=>s+x,0),balance=sumIn-sumOut;
+  let missing='El nodo ya está equilibrado.';
+  if(Math.abs(balance)>1e-9)missing=balance>0
+    ? `Falta una corriente de <strong>${f(balance)} A que salga</strong> del nodo.`
+    : `Falta una corriente de <strong>${f(Math.abs(balance))} A que entre</strong> al nodo.`;
+  out('kclResult',`Σ entrada = <strong>${f(sumIn)} A</strong> · Σ salida = <strong>${f(sumOut)} A</strong><br>${missing}`,'good');
+}
+
+function calcKirchhoffVoltage(){
+  const rises=parsePositiveList('kvlRise'),drops=parsePositiveList('kvlDrop');
+  if(!rises.length&&!drops.length)return out('kvlResult','Ingresa al menos una tensión conocida.','bad');
+  const sumRise=rises.reduce((s,x)=>s+x,0),sumDrop=drops.reduce((s,x)=>s+x,0),balance=sumRise-sumDrop;
+  let missing='El lazo ya está equilibrado.';
+  if(Math.abs(balance)>1e-9)missing=balance>0
+    ? `Falta una caída de <strong>${f(balance)} V</strong>.`
+    : `Falta una elevación de <strong>${f(Math.abs(balance))} V</strong>.`;
+  out('kvlResult',`Σ elevaciones = <strong>${f(sumRise)} V</strong> · Σ caídas = <strong>${f(sumDrop)} V</strong><br>${missing}`,'good');
 }
 function calcResistors(){
   const a=document.getElementById('resValues').value.split(/[,;\s]+/).map(Number).filter(x=>Number.isFinite(x)&&x>0);
@@ -855,6 +1518,72 @@ function calcConcentricLoad(){
   );
 }
 
+function calcEmpalme(){
+  const kw=v('empKW'),voltage=v('empV'),pf=v('empPF'),length=v('empLength');
+  if(!good(kw,voltage,pf,length)||kw<=0||voltage<=0||pf<=0||pf>1||length<0){
+    return out('empResult','Revisa potencia, voltaje, factor de potencia y longitud.','bad');
+  }
+  const current=kw*1000/(voltage*pf),breaker=nextConcentricBreaker(current),frontel=selectFrontelConcentric(current,length);
+  const status=breaker&&frontel.ok?'good':'warn';
+  const breakerText=breaker
+    ? `${breaker.a} A · ${breaker.type} (${breaker.kw} kW nominal)`
+    : 'Sobre 63 A: requiere una solución de empalme distinta';
+  const cableText=frontel.ok
+    ? `${frontel.cable} · tabla hasta ${frontel.maxA} A y ${frontel.maxL} m`
+    : 'Fuera del rango 2×4 / 2×6 mm² incorporado';
+  out('empResult',`<div class="cc-summary-grid"><div class="cc-summary-card"><small>Corriente calculada</small><strong>${f(current,2)} A</strong></div><div class="cc-summary-card"><small>Escalón de empalme</small><strong>${breakerText}</strong></div><div class="cc-summary-card"><small>Cable concéntrico Frontel</small><strong>${cableText}</strong></div><div class="cc-summary-card"><small>Revisión necesaria</small><strong>Factibilidad con distribuidora</strong></div></div>`,status);
+}
+
+function calcConductors(){
+  const type=document.getElementById('cdType').value,system=document.getElementById('cdSystem').value;
+  const kw=v('cdKW'),voltage=v('cdV'),pf=v('cdPF'),length=v('cdLength'),rho=Number(document.getElementById('cdMaterial').value),section=v('cdSection'),ampacity=v('cdAmpacity'),breaker=v('cdBreaker'),upstream=v('cdUpstream');
+  if(!good(kw,voltage,pf,length,rho,section,ampacity,breaker,upstream)||kw<=0||voltage<=0||pf<=0||pf>1||length<0||section<=0||ampacity<=0||breaker<=0||upstream<0){
+    return out('cdResult','Completa todos los datos con valores válidos.','bad');
+  }
+  const current=kw*1000/((system==='3'?Math.sqrt(3):1)*voltage*pf);
+  const deltaV=(system==='3'?Math.sqrt(3):2)*rho*length*current/section;
+  const dropPct=deltaV/voltage*100,totalDrop=dropPct+upstream;
+  const minSection=type==='feeder'?4:type==='subfeeder'?2.5:0;
+  const sectionOk=!minSection||section>=minSection;
+  const loadProtected=current<=breaker&&breaker<=ampacity;
+  const segmentOk=dropPct<=3,totalOk=totalDrop<=5;
+  const checks=[
+    {ok:current<=breaker,text:`Carga ${f(current,2)} A ≤ protección ${f(breaker,2)} A`},
+    {ok:breaker<=ampacity,text:`Protección ${f(breaker,2)} A ≤ ampacidad corregida ${f(ampacity,2)} A`},
+    {ok:sectionOk,text:minSection?`Sección ${f(section,2)} mm² ${sectionOk?'cumple':'no alcanza'} el mínimo de ${f(minSection,1)} mm²`:'La sección mínima del circuito final debe verificarse con su pliego aplicable'},
+    {ok:segmentOk,text:`Caída del tramo ${f(dropPct,2)}% ${segmentOk?'≤':'>'} 3%`},
+    {ok:totalOk,text:`Caída total estimada ${f(totalDrop,2)}% ${totalOk?'≤':'>'} 5%`}
+  ];
+  const favorable=sectionOk&&loadProtected&&segmentOk&&totalOk;
+  const list=checks.map((x,i)=>`<div class="check-item ${i===2&&!minSection?'warn':x.ok?'ok':'bad'}">${x.ok?'✓':'⚠'} ${x.text}</div>`).join('');
+  out('cdResult',`<strong>${favorable?'Revisión preliminar favorable':'Hay puntos que corregir o verificar'}</strong><br>Corriente de diseño: <strong>${f(current,2)} A</strong> · ΔV: <strong>${f(deltaV,2)} V</strong><div class="check-list">${list}</div><div class="muted" style="margin-top:10px">No reemplaza el cálculo con ampacidades y factores de corrección de RIC N°04.</div>`,favorable?'good':'warn');
+}
+
+function calcRicHome(){
+  const room=document.getElementById('ricRoom').value,area=v('ricRoomArea'),perimeter=v('ricPerimeter'),homeArea=v('ricHomeArea'),lux=v('ricLux'),lumens=v('ricLumens'),uf=v('ricUF'),mf=v('ricMF');
+  const oven=document.getElementById('ricOven').value==='1',cooktop=document.getElementById('ricCooktop').value==='1';
+  const perimeterRooms=['dormitorio','living','comedor','estar'];
+  if(!good(area,homeArea,lux,lumens,uf,mf)||area<=0||homeArea<=0||lux<=0||lumens<=0||uf<=0||uf>1||mf<=0||mf>1||perimeterRooms.includes(room)&&(!Number.isFinite(perimeter)||perimeter<0)){
+    return out('ricHomeResult','Revisa superficie, perímetro y datos de iluminación.','bad');
+  }
+  const centers=area<=10?1:2;
+  let outlets=null;
+  if(perimeterRooms.includes(room))outlets=Math.max(1,Math.ceil(perimeter/8));
+  if(room==='cocina')outlets=3;
+  if(room==='lavadero')outlets=1;
+  const extraOutlets=room==='cocina'?((oven?1:0)+(cooktop?1:0)):0;
+  if(outlets!==null)outlets+=extraOutlets;
+  const luminaires=Math.max(1,Math.ceil(area*lux/(lumens*uf*mf)));
+  const circuits=homeArea<30?2:3;
+  const applianceNote=extraOutlets
+    ? `<div class="check-item warn">Horno/cocina eléctrica: ${extraOutlets} enchufe(s) adicional(es), cada uno de al menos 16 A, y un circuito adicional independiente de mínimo 16 A según la potencia real.</div>`
+    : '';
+  const outletText=outlets===null
+    ? 'El RIC N°10 no entrega en esta regla un mínimo automático para el recinto seleccionado; revisar el proyecto y pliegos aplicables.'
+    : `${outlets} enchufe(s) doble(s) o triple(s) como mínimo${perimeterRooms.includes(room)?' (1 por cada 8 m de perímetro o fracción)':''}.`;
+  out('ricHomeResult',`<div class="cc-summary-grid"><div class="cc-summary-card"><small>Centros de iluminación RIC</small><strong>${centers} mínimo</strong></div><div class="cc-summary-card"><small>Luminarias estimadas</small><strong>${luminaires}</strong><div class="muted">${f(lux,0)} lux · ${f(lumens,0)} lm/unidad</div></div><div class="cc-summary-card"><small>Enchufes del recinto</small><strong>${outlets===null?'Revisión específica':outlets+' mínimo'}</strong></div><div class="cc-summary-card"><small>Circuitos de vivienda</small><strong>${circuits} mínimo</strong><div class="muted">Uno exclusivo para cocina/lavadero, mínimo 16 A.</div></div></div><div class="check-list"><div class="check-item ok">${outletText}</div>${applianceNote}</div><div class="muted" style="margin-top:10px">La estimación de luminarias no sustituye un diseño luminotécnico ni modifica los centros mínimos exigidos.</div>`,'good');
+}
+
 function calcVoltageDrop(){const sys=document.getElementById('vdSystem').value,rho=Number(document.getElementById('vdMaterial').value),V=v('vdV'),I=v('vdI'),L=v('vdL'),S=v('vdS');if(!good(rho,V,I,L,S)||V<=0||I<0||L<0||S<=0)return out('vdResult','Revisa los datos.','bad');const k=sys==='3'?Math.sqrt(3):2,dv=k*rho*L*I/S,pct=dv/V*100;out('vdResult',`<strong>ΔV ≈ ${f(dv)} V</strong><br>Caída porcentual ≈ ${f(pct,2)} %`,'good')}
 function calcRLC(){const V=v('rlcV'),freq=v('rlcF'),R=v('rlcR'),L=v('rlcL'),Cu=v('rlcC');if(!good(V,freq,R,L,Cu)||freq<=0||R<0||L<0||Cu<=0)return out('rlcResult','Completa valores válidos; C debe ser mayor que 0.','bad');const C=Cu*1e-6,XL=2*Math.PI*freq*L,XC=1/(2*Math.PI*freq*C),X=XL-XC,Z=Math.sqrt(R*R+X*X),I=Z?V/Z:Infinity,ang=Math.atan2(X,R)*180/Math.PI;out('rlcResult',`XL=${f(XL)} Ω · XC=${f(XC)} Ω<br><strong>Z=${f(Z)} Ω · I=${f(I)} A</strong><br>Ángulo=${f(ang,2)}°`,'good')}
 function calcTransformer(){const V1=v('trV1'),V2=v('trV2');if(!good(V1,V2)||V1===0||V2===0)return out('trResult','V1 y V2 son obligatorios y distintos de cero.','bad');const ratio=V1/V2;let html=`<strong>V1/V2 = ${f(ratio)}</strong>`;const N1=v('trN1'),N2=v('trN2'),I1=v('trI1'),I2=v('trI2');if(Number.isFinite(N1)&&!Number.isFinite(N2))html+=`<br>N2 ≈ ${f(N1/ratio)} espiras`;if(Number.isFinite(N2)&&!Number.isFinite(N1))html+=`<br>N1 ≈ ${f(N2*ratio)} espiras`;if(Number.isFinite(I1)&&!Number.isFinite(I2))html+=`<br>I2 ≈ ${f(I1*ratio)} A`;if(Number.isFinite(I2)&&!Number.isFinite(I1))html+=`<br>I1 ≈ ${f(I2/ratio)} A`;out('trResult',html,'good')}
@@ -882,7 +1611,7 @@ function calcTakeoff(){
   document.getElementById('saveCubBtn').disabled=false;
   out('cubResult',`<strong>Área:</strong> ${f(area,2)} m²<br><strong>Recorridos:</strong> ${f(route,2)} m<br><strong>Canalización con ${f(waste,1)}%:</strong> ${f(conduit,2)} m<br><strong>Conductor total (${cond} por recorrido) con reserva:</strong> ${f(wire,2)} m<br><strong>Puntos declarados:</strong> ${lights+sw+outlets} · <strong>Cajas derivación:</strong> ${boxes}<br><strong>Circuitos declarados:</strong> ${circuits}<br><small>No se asigna sección ni calibre de protección automáticamente.</small>`,'good')
 }
-async function saveTakeoff(){if(!lastTakeoff)return;const btn=document.getElementById('saveCubBtn');setBusy(btn,true,'Guardando…');try{await rpc('saveCubicacion',lastTakeoff);toast('Cubicación guardada en la planilla')}catch(e){toast(e.message)}finally{setBusy(btn,false)}}
+async function saveTakeoff(){if(!lastTakeoff)return;const btn=document.getElementById('saveCubBtn');setBusy(btn,true,'Guardando…');try{const r=await rpc('saveCubicacion',lastTakeoff);toast(r&&r.queued?'Cubicación guardada; se sincronizará al volver internet':'Cubicación guardada en la planilla')}catch(e){toast(e.message)}finally{setBusy(btn,false)}}
 
 function renderHomeModules(){document.getElementById('homeModules').innerHTML=modules.map(m=>`<div class="modulecard" onclick="activeModule='${m.id}';state.lastModule='${m.id}';save();showView('study')" style="cursor:pointer"><div><b>${m.icon} ${esc(m.short)}</b><small>${m.code}</small></div><span class="pill">Estudiar</span></div>`).join('')}
 function tkey(m,i){return m+':'+i}
@@ -903,11 +1632,19 @@ function renderGuides(){
   const box=document.getElementById('guideList');
 
   if(!list.length){
-    box.innerHTML='<p class="muted">No hay guías offline en este ramo. Importa un paquete más reciente desde Ajustes.</p>';
+    box.innerHTML=`<p class="muted">${hybrid.backendReachable?'No hay guías en este ramo. Puedes subir la primera ahora.':'No hay guías guardadas para este ramo. Se actualizarán cuando vuelva la conexión.'}</p>`;
     return;
   }
 
-  box.innerHTML=list.map(g=>`
+  box.innerHTML=list.map(g=>{
+    const status=String(g.status||'').toUpperCase();
+    const processButton=status==='PROCESADA'
+      ? ''
+      : `<button class="btn secondary online-only owner-only" onclick="processGuide('${g.id}',this)">Procesar IA</button>`;
+    const driveButton=g.url
+      ? `<button class="btn secondary online-only" onclick="window.open('${esc(g.url)}','_blank','noopener')">Abrir archivo</button>`
+      : '';
+    return `
     <div class="guidecard">
       <div>
         <b>${esc(g.title)}</b>
@@ -915,19 +1652,22 @@ function renderGuides(){
         <div class="guide-actions">
           <button class="btn green" onclick="studyGuide('${g.id}')">Estudiar</button>
           <button class="btn secondary" onclick="quizFromGuide('${g.id}')">Quiz</button>
+          ${processButton}
+          ${driveButton}
+          <button class="btn red online-only owner-only" onclick="removeGuide('${g.id}',decodeURIComponent('${encodeURIComponent(g.title||'Guía')}'))">Eliminar</button>
         </div>
       </div>
       ${guidePill(g.status)}
     </div>
-  `).join('');
+  `}).join('');
 }
 
-async function uploadGuide(){const file=document.getElementById('guideFile').files[0],title=document.getElementById('guideTitle').value.trim();if(!file)return toast('Selecciona un archivo');if(file.size>25*1024*1024)return toast('El archivo supera 25 MB');const btn=document.getElementById('uploadGuideBtn');setBusy(btn,true,'Subiendo…');try{const b64=await fileToBase64(file);const m=modules.find(x=>x.id===activeModule);const res=await rpc('uploadStudyFile',{moduleId:activeModule,title:title||file.name,fileName:file.name,mimeType:file.type||'application/octet-stream',base64:b64});remote.guides.unshift(res.guide);document.getElementById('guideFile').value='';document.getElementById('guideTitle').value='';renderGuides();renderStats();toast('Guía guardada en Drive')}catch(e){toast(e.message)}finally{setBusy(btn,false)}}
+async function uploadGuide(){const file=document.getElementById('guideFile').files[0],title=document.getElementById('guideTitle').value.trim();if(!file)return toast('Selecciona un archivo');if(file.size>25*1024*1024)return toast('El archivo supera 25 MB');const btn=document.getElementById('uploadGuideBtn');setBusy(btn,true,'Subiendo…');try{const b64=await fileToBase64(file);const res=await rpc('uploadStudyFile',{moduleId:activeModule,title:title||file.name,fileName:file.name,mimeType:file.type||'application/octet-stream',base64:b64});remote.guides.unshift(res.guide);document.getElementById('guideFile').value='';document.getElementById('guideTitle').value='';renderGuides();renderStats();toast('Guía guardada en Drive')}catch(e){toast(e.message)}finally{setBusy(btn,false)}}
 function fileToBase64(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]||'');r.onerror=reject;r.readAsDataURL(file)})}
-async function processGuide(id,btn){if(!remote.ai.configured){toast('Primero configura tu Gemini API key en Ajustes');showView('settings');return}setBusy(btn,true,'Analizando…');try{const res=await rpc('analyzeGuide',id);const g=remote.guides.find(x=>x.id===id);if(g)g.status='PROCESADA';renderGuides();toast(`Listo: ${res.questions} preguntas creadas`)}catch(e){const g=remote.guides.find(x=>x.id===id);if(g)g.status='ERROR';renderGuides();toast(e.message)}finally{setBusy(btn,false)}}
+async function processGuide(id,btn){if(!remote.ai.configured){toast('Primero configura OpenAI o Gemini en Ajustes');showView('settings');return}setBusy(btn,true,'Analizando…');try{const res=await rpc('analyzeGuide',id);const g=remote.guides.find(x=>x.id===id);if(g)g.status='PROCESADA';renderGuides();await refreshOfflineCache(false);toast(`Listo con ${res.provider==='openai'?'OpenAI':remote.ai.providerLabel||'IA'}: ${res.questions} preguntas creadas`)}catch(e){const g=remote.guides.find(x=>x.id===id);if(g)g.status='ERROR';renderGuides();toast(e.message)}finally{setBusy(btn,false)}}
 async function processAllCurrentModule(btn){
   if(!remote.ai.configured){
-    toast('Primero configura Gemini');
+    toast('Primero configura OpenAI o Gemini');
     return showView('settings');
   }
 
@@ -969,7 +1709,8 @@ async function processAllCurrentModule(btn){
       await new Promise(resolve=>setTimeout(resolve,700));
     }
 
-    toast(`Proceso terminado: ${ok} guía(s) procesadas`);
+    await refreshOfflineCache(false);
+    toast(`Proceso terminado: ${ok} guía(s) procesadas y guardadas offline`);
 
   }catch(e){
     statusBox.className='result bad';
@@ -1045,7 +1786,8 @@ function renderMarkdown(text){
     if(quote){html+='</blockquote>';quote=false}
   }
 
-  for(const raw of lines){
+  for(let index=0;index<lines.length;index++){
+    const raw=lines[index];
     const line=raw.trimEnd();
     const t=line.trim();
 
@@ -1064,6 +1806,21 @@ function renderMarkdown(text){
 
     if(codeBlock){
       codeLines.push(raw);
+      continue;
+    }
+
+    if(t.includes('|')&&index+1<lines.length&&/^\s*\|?\s*:?-{3,}/.test(lines[index+1])){
+      closeLists();closeQuote();
+      const cells=row=>row.trim().replace(/^\||\|$/g,'').split('|').map(x=>x.trim());
+      const headers=cells(t);
+      index+=2;
+      const rows=[];
+      while(index<lines.length&&lines[index].includes('|')&&lines[index].trim()){
+        rows.push(cells(lines[index]));
+        index++;
+      }
+      index--;
+      html+='<div class="tablewrap"><table><thead><tr>'+headers.map(x=>`<th>${mdInline(x)}</th>`).join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+headers.map((_,i)=>`<td>${mdInline(row[i]||'')}</td>`).join('')+'</tr>').join('')+'</tbody></table></div>';
       continue;
     }
 
@@ -1125,16 +1882,220 @@ function renderMarkdown(text){
 
   return `<div class="markdown-body">${html}</div>`;
 }
-async function askCurrentGuide(){
-  out(
-    'guideAnswer',
-    '<strong>Sin conexión:</strong> las preguntas nuevas a Gemini requieren internet. Puedes estudiar el resumen y hacer el quiz guardado.',
-    'warn'
-  );
+
+function normText(value){
+  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 }
 
-async function summarizeCurrentModule(){if(!remote.ai.configured){toast('Configura la IA primero');return showView('settings')}try{toast('Creando resumen del ramo…');const r=await rpc('summarizeModule',activeModule);currentGuideId='';document.getElementById('guideStudyTitle').textContent='Resumen conjunto · '+modules.find(x=>x.id===activeModule).short;document.getElementById('guideStudyContent').innerHTML=`<h3>Resumen de todas las guías procesadas</h3>${renderMarkdown(r.summary)}`;showView('guideStudy')}catch(e){toast(e.message)}}
-async function removeGuide(id,title){if(!confirm(`¿Eliminar "${title}" de la biblioteca y enviar su archivo a la papelera?`))return;try{await rpc('deleteGuide',id);remote.guides=remote.guides.filter(x=>x.id!==id);renderGuides();renderStats();toast('Guía eliminada')}catch(e){toast(e.message)}}
+function normDoc(id){return NORMATIVE_DOCS.find(x=>x.id===id)||null}
+
+function autoRouteNormativa(question){
+  const q=normText(question);
+  const explicit=q.match(/ric\s*(?:n|nro|numero)?\s*[°º#]?\s*(\d{1,2})/);
+  if(explicit){
+    const id='ric-'+String(Number(explicit[1])).padStart(2,'0');
+    if(normDoc(id))return normDoc(id);
+  }
+  if(/decreto|reglamento base|responsabilidad|fiscalizacion/.test(q))return normDoc('decreto-8');
+  if(/33877|resolucion|diario oficial|vigencia de los pliegos/.test(q))return normDoc('res-33877-do');
+  const words=q.split(/[^a-z0-9]+/).filter(x=>x.length>=4);
+  let best=normDoc('ric-10'),bestScore=0;
+  NORMATIVE_DOCS.filter(x=>x.type==='ric').forEach(doc=>{
+    const hay=normText([doc.code,doc.title,doc.summary,doc.tags].join(' '));
+    let score=0;
+    words.forEach(word=>{if(hay.includes(word))score+=word.length});
+    if(score>bestScore){best=doc;bestScore=score}
+  });
+  return best;
+}
+
+function renderNormativa(){
+  if(!NORMATIVE_DOCS.length)return out('normOfflineStatus','No se pudo cargar el catálogo normativo.','bad');
+  if(!normDoc(activeNorm))activeNorm='ric-10';
+  const select=document.getElementById('normDocSelect');
+  if(select&&!select.options.length){
+    select.innerHTML='<option value="auto">Elegir automáticamente por tema</option>'+NORMATIVE_DOCS.map(d=>`<option value="${d.id}">${esc(d.code)} · ${esc(d.title)}</option>`).join('');
+  }
+  if(select)select.value=activeNorm;
+
+  const chips=document.getElementById('normChips');
+  if(chips){
+    chips.innerHTML=NORMATIVE_DOCS.filter(doc=>doc.type==='ric').map(doc=>`<button class="chip ${doc.id===activeNorm?'active':''}" onclick="setActiveNorm('${doc.id}')">${esc(doc.code.replace('N°',''))}</button>`).join('');
+  }
+
+  renderActiveNorm();
+  renderNormativaList();
+
+  const read=NORMATIVE_DOCS.filter(d=>d.type==='ric'&&state.normRead[d.id]).length;
+  const readLabel=document.getElementById('normReadCount');
+  const bar=document.getElementById('normStudyBar');
+  if(readLabel)readLabel.textContent=`${read}/19`;
+  if(bar)bar.style.width=`${Math.round(read/19*100)}%`;
+  updateNormOfflineCount();
+}
+
+function renderActiveNorm(){
+  const doc=normDoc(activeNorm)||normDoc('ric-10');
+  const box=document.getElementById('normStudy');
+  const badge=document.getElementById('normSelectedBadge');
+  if(!doc||!box)return;
+  if(badge)badge.textContent=doc.code;
+  box.innerHTML=`<article class="studybox norm-study-card">
+    <div class="norm-study-head"><div><p class="kicker">${esc(doc.code)} · ${doc.pages} páginas</p><h3>${esc(doc.title)}</h3></div><button class="icon" onclick="toggleNormFavorite('${doc.id}')" aria-label="Favorito">${state.normFavorites[doc.id]?'★':'☆'}</button></div>
+    <p class="muted">${esc(doc.summary)}</p>
+    <div class="btnrow"><button class="btn green" onclick="openNormDocument('${doc.id}')">Abrir PDF</button><button class="btn secondary" onclick="focusNormQuestion()">Preguntar</button></div>
+    <label class="norm-check"><input type="checkbox" ${state.normRead[doc.id]?'checked':''} onchange="toggleNormRead('${doc.id}',this.checked)"> ${doc.type==='ric'?'Estudiado':'Revisado'}</label>
+    <details class="simple-details"><summary>Mis apuntes</summary><textarea id="normNotes" placeholder="Escribe tus apuntes…">${esc(state.normNotes[doc.id]||'')}</textarea><button class="btn secondary compact" onclick="saveNormNotes('${doc.id}')">Guardar apuntes</button></details>
+  </article>`;
+}
+
+function renderNormativaList(){
+  const search=normText(document.getElementById('normSearch')?.value||'');
+  const filter=document.getElementById('normFilter')?.value||'all';
+  const docs=NORMATIVE_DOCS.filter(doc=>{
+    const matches=!search||normText([doc.code,doc.title,doc.summary,doc.tags].join(' ')).includes(search)||search.split(/\s+/).every(w=>normText([doc.title,doc.tags].join(' ')).includes(w));
+    if(!matches)return false;
+    if(filter==='base')return doc.type==='base';
+    if(filter==='ric')return doc.type==='ric';
+    if(filter==='pending')return doc.type==='ric'&&!state.normRead[doc.id];
+    if(filter==='read')return doc.type==='ric'&&state.normRead[doc.id];
+    return true;
+  }).sort((a,b)=>Number(Boolean(state.normFavorites[b.id]))-Number(Boolean(state.normFavorites[a.id])));
+  const box=document.getElementById('normList');
+  if(!box)return;
+  box.innerHTML=docs.length?docs.map(doc=>`
+    <article class="norm-card compact ${state.normRead[doc.id]?'is-read':''} ${state.normFavorites[doc.id]?'is-favorite':''}" onclick="setActiveNorm('${doc.id}')">
+      <div><span class="norm-code">${esc(doc.code)}</span><h4>${esc(doc.title)}</h4></div><span class="norm-arrow">›</span>
+    </article>`).join(''):'<div class="result warn">No encontré documentos con ese filtro.</div>';
+}
+
+function setActiveNorm(id){
+  if(!normDoc(id))return;
+  activeNorm=id;
+  state.lastNorm=id;
+  save();
+  renderNormativa();
+  document.getElementById('normStudy')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function toggleNormRead(id,checked){state.normRead[id]=Boolean(checked);save();renderNormativa()}
+function toggleNormFavorite(id){state.normFavorites[id]=!state.normFavorites[id];save();renderNormativa()}
+function saveNormNotes(id){state.normNotes[id]=document.getElementById('normNotes')?.value||'';save();toast('Apuntes guardados')}
+
+function openNormDocument(id){
+  const doc=normDoc(id);if(!doc)return;
+  window.open(doc.file,'_blank','noopener');
+}
+
+function openActiveNormDocument(){openNormDocument(activeNorm)}
+function focusNormQuestion(){document.getElementById('normQuestion')?.focus();document.getElementById('normQuestion')?.scrollIntoView({behavior:'smooth',block:'center'})}
+
+function selectNormForAi(id){
+  activeNorm=id;
+  state.lastNorm=id;
+  save();
+  const select=document.getElementById('normDocSelect');
+  if(select)select.value=id;
+  renderNormativa();
+  focusNormQuestion();
+}
+
+async function updateNormOfflineCount(){
+  const el=document.getElementById('normOfflineCount');
+  if(!el)return;
+  if(IS_LOCAL_FILE||!('caches' in window)){el.textContent='3/22';return}
+  try{
+    const cache=await caches.open(NORMATIVE_CACHE);
+    let count=0;
+    for(const doc of NORMATIVE_DOCS){if(await cache.match(doc.file))count++}
+    el.textContent=`${count}/22`;
+    if(count===NORMATIVE_DOCS.length){
+      out('normOfflineStatus','<strong>Biblioteca completa disponible offline.</strong> Puedes abrir los 22 documentos sin conexión.','good');
+      const btn=document.getElementById('normOfflineBtn');if(btn)btn.textContent='Biblioteca offline lista';
+    }
+  }catch(ignore){el.textContent='3/22'}
+}
+
+async function downloadNormativaOffline(){
+  if(IS_LOCAL_FILE)return out('normOfflineStatus','Abre la app desde GitHub Pages para descargar la biblioteca offline.','warn');
+  if(!navigator.onLine)return out('normOfflineStatus','Conéctate a internet una vez para descargar los 19 pliegos RIC.','warn');
+  const btn=document.getElementById('normOfflineBtn');
+  setBusy(btn,true,'Preparando…');
+  let completed=0,failed=0;
+  try{
+    if(navigator.storage?.persist)await navigator.storage.persist();
+    const cache=await caches.open(NORMATIVE_CACHE);
+    for(const doc of NORMATIVE_DOCS){
+      try{
+        if(!(await cache.match(doc.file))){
+          const response=await fetch(doc.file,{cache:'reload'});
+          if(!response.ok)throw new Error('HTTP '+response.status);
+          await cache.put(doc.file,response.clone());
+        }
+        completed++;
+      }catch(error){failed++}
+      btn.innerHTML=`Descargando ${completed+failed}/22`;
+      document.getElementById('normOfflineCount').textContent=`${completed}/22`;
+    }
+    if(failed)out('normOfflineStatus',`Se guardaron ${completed} documentos. Faltaron ${failed}; vuelve a pulsar el botón con una conexión estable.`,'warn');
+    else out('normOfflineStatus','<strong>Biblioteca completa disponible offline.</strong> Los 22 documentos quedaron guardados en este dispositivo.','good');
+  }catch(error){
+    out('normOfflineStatus',esc(error.message||error),'bad');
+  }finally{
+    setBusy(btn,false);
+    btn.textContent=failed?'Reintentar descarga':'Biblioteca offline lista';
+    updateNormOfflineCount();
+  }
+}
+
+async function askNormativa(btn){
+  const question=document.getElementById('normQuestion').value.trim();
+  if(!question)return toast('Escribe una pregunta sobre la normativa.');
+  if(!hybrid.backendReachable||!accessToken){
+    return out('normAnswer','<strong>Sin conexión:</strong> puedes buscar y abrir los PDF guardados, pero una respuesta nueva de la IA requiere internet y tu cuenta conectada.','warn');
+  }
+  const openAiReady=Boolean(remote.ai&&remote.ai.providers&&remote.ai.providers.openai&&remote.ai.providers.openai.configured);
+  if(!openAiReady){toast('Configura OpenAI en Ajustes para consultar los PDF');return showView('settings')}
+  let docId=document.getElementById('normDocSelect').value;
+  const doc=docId==='auto'?autoRouteNormativa(question):normDoc(docId);
+  if(!doc)return out('normAnswer','No pude identificar el documento. Selecciona un RIC.','bad');
+  activeNorm=doc.id;
+  state.lastNorm=doc.id;
+  save();
+  document.getElementById('normDocSelect').value=doc.id;
+  const badge=document.getElementById('normSelectedBadge');if(badge)badge.textContent=doc.code;
+  const style=document.getElementById('normAnswerStyle').value;
+  setBusy(btn,true,'Consultando…');
+  out('normAnswer',`<span class="loader"></span> Revisando ${esc(doc.code)}…`);
+  try{
+    const response=await rpc('askNormativa',doc.id,question,style);
+    out('normAnswer',`${renderMarkdown(response.answer||'La IA no devolvió una respuesta.')}<div class="norm-answer-source"><strong>Fuente consultada:</strong> ${esc(doc.code)} · ${esc(doc.title)} <button class="btn secondary" onclick="openNormDocument('${doc.id}')">Abrir PDF</button></div>`,'good');
+  }catch(error){out('normAnswer',esc(error.message||error),'bad')}
+  finally{setBusy(btn,false)}
+}
+
+async function askCurrentGuide(){
+  const question=document.getElementById('guideQuestion').value.trim();
+  if(!question)return toast('Escribe una pregunta.');
+  if(!hybrid.backendReachable||!accessToken){
+    return out(
+      'guideAnswer',
+      '<strong>Sin conexión:</strong> las preguntas nuevas a la IA requieren internet. Puedes estudiar el resumen y hacer el quiz guardado.',
+      'warn'
+    );
+  }
+  out('guideAnswer','<span class="loader"></span> Consultando la guía…');
+  try{
+    const response=await rpc('askGuide',currentGuideId,question);
+    const answer=typeof response==='string'?response:(response&&response.answer)||'';
+    out('guideAnswer',renderMarkdown(answer||'La IA no devolvió una respuesta.'),'good');
+  }catch(e){
+    out('guideAnswer',esc(e.message),'bad');
+  }
+}
+
+async function summarizeCurrentModule(){if(hybrid.backendReachable&&accessToken&&!remote.ai.configured){toast('Configura la IA primero');return showView('settings')}try{toast(hybrid.backendReachable?'Creando resumen del ramo…':'Abriendo el repaso guardado…');const r=await rpc('summarizeModule',activeModule);currentGuideId='';document.getElementById('guideStudyTitle').textContent='Resumen conjunto · '+modules.find(x=>x.id===activeModule).short;document.getElementById('guideStudyContent').innerHTML=`<h3>Resumen de todas las guías procesadas</h3>${renderMarkdown(r.summary)}`;showView('guideStudy')}catch(e){toast(e.message)}}
+async function removeGuide(id,title){if(!confirm(`¿Eliminar "${title}" de la biblioteca y enviar su archivo a la papelera?`))return;try{await rpc('deleteGuide',id);remote.guides=remote.guides.filter(x=>x.id!==id);renderGuides();renderStats();await refreshOfflineCache(false);toast('Guía eliminada')}catch(e){toast(e.message)}}
 
 function populateQuiz(){const e=document.getElementById('quizModule');e.innerHTML='<option value="all">Todos los ramos</option>'+modules.map(m=>`<option value="${m.id}">${esc(m.short)}</option>`).join('')}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
@@ -1147,12 +2108,74 @@ function nextQuiz(){quizState.index++;quizState.answered=false;renderQuizQuestio
 function renderSemester(){document.getElementById('semesterList').innerHTML=modules.map(m=>{const s=state.semester[m.id]||{};return`<div class="studybox"><p class="kicker">${m.code}</p><h3>${m.icon} ${esc(m.short)}</h3><div class="form2"><label>Profesor<input value="${esc(s.professor||'')}" onchange="setSem('${m.id}','professor',this.value)" placeholder="Pendiente"></label><label>Horario<input value="${esc(s.schedule||'')}" onchange="setSem('${m.id}','schedule',this.value)" placeholder="Pendiente"></label><label>Sala<input value="${esc(s.room||'')}" onchange="setSem('${m.id}','room',this.value)" placeholder="Pendiente"></label><label>Fecha inicio<input type="date" value="${esc(s.start||'')}" onchange="setSem('${m.id}','start',this.value)"></label><label>Fecha término<input type="date" value="${esc(s.end||'')}" onchange="setSem('${m.id}','end',this.value)"></label></div><label>Notas<textarea onchange="setSem('${m.id}','notes',this.value)" placeholder="Evaluaciones, materiales, recordatorios...">${esc(s.notes||'')}</textarea></label></div>`}).join('')}
 function setSem(m,k,x){if(!state.semester[m])state.semester[m]={};state.semester[m][k]=x;save()}
 
-function renderSettings(){document.getElementById('setLocation').value=remote.config.location||'Angol';document.getElementById('setKwh').value=remote.config.kwh||291;document.getElementById('setKwhSource').value=remote.config.source||'';renderAiStatus();if(remote.access&&remote.access.role==='owner')loadAuthorizedUsers()}
-function renderAiStatus(){const on=remote.ai&&remote.ai.configured;document.getElementById('aiDot').classList.toggle('on',on);document.getElementById('aiLabel').textContent=on?`Clave Gemini configurada · ${remote.ai.model||''}`:'IA no configurada';document.getElementById('aiStatusBox').innerHTML=on?`<strong>Clave configurada</strong> · pulsa “Probar conexión” para validarla · modelo ${esc(remote.ai.model||'')}`:'No hay API key configurada.'}
-async function saveTariff(){const loc=document.getElementById('setLocation').value,val=Number(document.getElementById('setKwh').value),src=document.getElementById('setKwhSource').value;try{const r=await rpc('saveEnergySettings',loc,val,src);remote.config={...remote.config,location:r.location,kwh:r.kwh,source:r.source,updated:r.updated};applyRemoteConfig();out('tariffSaved',`Guardado: <strong>${esc(r.location)} · ${money(r.kwh)}/kWh</strong><br>${esc(r.source)}`,'good');toast('Tarifa actualizada')}catch(e){out('tariffSaved',esc(e.message),'bad')}}
-async function saveAiKey(){const key=document.getElementById('geminiKey').value.trim();if(!key)return toast('Pega la API key');try{remote.ai=await rpc('saveGeminiApiKey',key);document.getElementById('geminiKey').value='';renderAiStatus();toast('API key guardada')}catch(e){toast(e.message)}}
-async function removeAiKey(){if(!confirm('¿Eliminar la API key de este proyecto?'))return;try{remote.ai=await rpc('clearGeminiApiKey');renderAiStatus();toast('API key eliminada')}catch(e){toast(e.message)}}
-async function testAi(){out('aiStatusBox','<span class="loader"></span> Probando Gemini…');try{const r=await rpc('testGeminiConnection');out('aiStatusBox',`<strong>Conexión correcta</strong> · HTTP ${r.status} · ${esc(r.model)} · respuesta: ${esc(r.answer)}`,'good');document.getElementById('aiDot').classList.add('on');document.getElementById('aiLabel').textContent=`IA conectada · ${r.model}`;toast('Gemini conectado correctamente')}catch(e){out('aiStatusBox',esc(e.message),'bad');document.getElementById('aiDot').classList.remove('on');document.getElementById('aiLabel').textContent='Clave configurada, conexión con error';toast('Gemini no pudo autenticarse')}}
+function renderSettings(){document.getElementById('setLocation').value=remote.config.location||'Angol';document.getElementById('setKwh').value=remote.config.kwh||291;document.getElementById('setKwhSource').value=remote.config.source||'';renderConnectionControls();renderAiStatus();if(remote.access&&remote.access.role==='owner')loadAuthorizedUsers()}
+function renderAiStatus(){
+  const dot=document.getElementById('aiDot'),label=document.getElementById('aiLabel'),box=document.getElementById('aiStatusBox');
+  if(!dot||!label||!box)return;
+  const provider=String(remote.ai.provider||'gemini');
+  const providerLabel=String(remote.ai.providerLabel||(provider==='openai'?'OpenAI':'Gemini'));
+  const on=hybrid.backendReachable&&accessToken&&remote.ai&&remote.ai.configured;
+  const providerSelect=document.getElementById('aiProviderSelect');
+  const modelInput=document.getElementById('openAiModel');
+  if(providerSelect)providerSelect.value=provider==='openai'?'openai':'gemini';
+  if(modelInput){
+    const configuredModel=((remote.ai.providers||{}).openai||{}).model;
+    if(configuredModel)modelInput.value=configuredModel;
+  }
+  dot.classList.toggle('on',on);
+  if(!hybrid.backendReachable){
+    const manual=hybrid.connectionMode==='offline';
+    label.textContent=manual?'IA pausada por modo offline manual':'IA disponible al volver internet';
+    box.className='result warn';
+    box.innerHTML=manual?'<strong>Modo offline manual.</strong> Elige Online o Automático para volver a usar la IA.':'<strong>Modo offline.</strong> La IA se reactivará cuando Apps Script responda.';
+    return;
+  }
+  if(!accessToken){
+    label.textContent='Conecta tu cuenta para usar IA';
+    box.className='result warn';
+    box.innerHTML='Internet disponible. Conecta tu cuenta en esta pantalla para usar OpenAI o Gemini.';
+    return;
+  }
+  const providers=remote.ai.providers||{};
+  const openAiReady=!!(providers.openai&&providers.openai.configured);
+  const geminiReady=!!(providers.gemini&&providers.gemini.configured);
+  label.textContent=on?`${providerLabel} activo · ${remote.ai.model||''}`:`${providerLabel} no configurado`;
+  box.className='result '+(on?'good':'warn');
+  box.innerHTML=(on
+    ? `<strong>${esc(providerLabel)} está activo</strong> · modelo ${esc(remote.ai.model||'')}`
+    : `<strong>${esc(providerLabel)} necesita una API key.</strong>`)
+    +`<br><small>OpenAI: ${openAiReady?'configurado':'sin clave'} · Gemini: ${geminiReady?'configurado':'sin clave'}</small>`;
+}
+async function saveTariff(){const loc=document.getElementById('setLocation').value,val=Number(document.getElementById('setKwh').value),src=document.getElementById('setKwhSource').value;try{const r=await rpc('saveEnergySettings',loc,val,src);remote.config={...remote.config,location:r.location,kwh:r.kwh,source:r.source,updated:r.updated};applyRemoteConfig();out('tariffSaved',`Guardado: <strong>${esc(r.location)} · ${money(r.kwh)}/kWh</strong><br>${esc(r.source)}${r.queued?'<br><small>Se sincronizará al volver internet.</small>':''}`,'good');toast(r.queued?'Tarifa guardada localmente':'Tarifa actualizada')}catch(e){out('tariffSaved',esc(e.message),'bad')}}
+async function saveAiProviderSelection(){
+  const provider=document.getElementById('aiProviderSelect').value;
+  const model=document.getElementById('openAiModel').value.trim();
+  try{remote.ai=await rpc('setAiProvider',provider,model);renderAiStatus();toast(`${remote.ai.providerLabel} quedó como IA principal`)}catch(e){toast(e.message)}
+}
+async function saveOpenAiKey(){
+  const key=document.getElementById('openAiKey').value.trim();
+  const model=document.getElementById('openAiModel').value.trim();
+  if(!key)return toast('Pega la API key de OpenAI');
+  try{remote.ai=await rpc('saveOpenAIApiKey',key,model);document.getElementById('openAiKey').value='';renderAiStatus();toast('OpenAI guardado y activado')}catch(e){toast(e.message)}
+}
+async function removeOpenAiKey(){
+  if(!confirm('¿Eliminar la API key de OpenAI de Apps Script?'))return;
+  try{remote.ai=await rpc('clearOpenAIApiKey');renderAiStatus();toast('API key de OpenAI eliminada')}catch(e){toast(e.message)}
+}
+async function testOpenAi(){
+  out('aiStatusBox','<span class="loader"></span> Probando OpenAI…');
+  try{const r=await rpc('testOpenAIConnection');out('aiStatusBox',`<strong>OpenAI conectado</strong> · HTTP ${r.status} · ${esc(r.model)} · respuesta: ${esc(r.answer)}`,'good');toast('OpenAI conectado correctamente')}catch(e){out('aiStatusBox',esc(e.message),'bad');toast('OpenAI no pudo autenticarse')}
+}
+async function saveAiKey(){
+  const key=document.getElementById('geminiKey').value.trim();
+  if(!key)return toast('Pega la API key de Gemini');
+  try{await rpc('saveGeminiApiKey',key);remote.ai=await rpc('setAiProvider','gemini','');document.getElementById('geminiKey').value='';renderAiStatus();toast('Gemini guardado y activado')}catch(e){toast(e.message)}
+}
+async function removeAiKey(){
+  if(!confirm('¿Eliminar la API key de Gemini de Apps Script?'))return;
+  try{await rpc('clearGeminiApiKey');await refreshAiProviderStatus();renderAiStatus();toast('API key de Gemini eliminada')}catch(e){toast(e.message)}
+}
+async function testAi(){out('aiStatusBox','<span class="loader"></span> Probando Gemini…');try{const r=await rpc('testGeminiConnection');out('aiStatusBox',`<strong>Gemini conectado</strong> · HTTP ${r.status} · ${esc(r.model)} · respuesta: ${esc(r.answer)}`,'good');toast('Gemini conectado correctamente')}catch(e){out('aiStatusBox',esc(e.message),'bad');toast('Gemini no pudo autenticarse')}}
 function applyRemoteConfig(){const price=document.getElementById('ePrice');if(price)price.value=remote.config.kwh||291;const loc=document.getElementById('cubLocation');if(loc&&!loc.value)loc.value=remote.config.location||'Angol';out('energyTariffInfo',`<strong>${esc(remote.config.location||'Angol')}:</strong> ${money(remote.config.kwh||291)}/kWh<br><small>${esc(remote.config.source||'Valor referencial')} · editable en Ajustes</small>`,'good')}
 
 async function downloadOfflinePackage(btn){
@@ -1195,9 +2218,9 @@ async function downloadOfflinePackage(btn){
   }
 }
 
-function exportData(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='alex-electric-toolbox-respaldo-local.json';a.click();URL.revokeObjectURL(url);toast('Respaldo local exportado')}
-async function importData(e){const file=e.target.files&&e.target.files[0];if(!file)return;try{const d=JSON.parse(await file.text());state={...state,...d,progress:{...(d.progress||{})},notes:{...(d.notes||{})},semester:{...defaultSemester,...(d.semester||{})}};save();renderStudy();renderSemester();renderStats();toast('Respaldo importado')}catch(err){toast('Archivo no válido')}e.target.value=''}
-function clearData(){if(!confirm('¿Borrar progreso, apuntes y datos locales del semestre? Las guías y datos de la planilla NO se borrarán.'))return;localStorage.removeItem(KEY);localStorage.removeItem(LEGACY_KEY);state=loadState();activeModule='corr';renderStudy();renderSemester();renderStats();toast('Datos locales borrados')}
+async function exportData(){const backup={format:'alex-electric-toolbox-hybrid-backup',schemaVersion:1,exportedAt:new Date().toISOString(),state,offlinePackage:offlinePackage||await offlineDbGet('package')||emptyOfflinePackage(),unsyncedProgress:offlineProgressMap(),quizHistory:JSON.parse(localStorage.getItem(OFFLINE_QUIZ_HISTORY_KEY)||'[]'),cubicaciones:JSON.parse(localStorage.getItem(OFFLINE_CUB_KEY)||'[]'),syncQueue:await getSyncQueue()};const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='alex-electric-toolbox-v4-respaldo-local.json';a.click();URL.revokeObjectURL(url);toast('Respaldo local exportado')}
+async function importData(e){const file=e.target.files&&e.target.files[0];if(!file)return;try{const d=JSON.parse(await file.text());const importedState=d.format==='alex-electric-toolbox-hybrid-backup'?(d.state||{}):d;state={...state,...importedState,progress:{...(importedState.progress||{})},notes:{...(importedState.notes||{})},semester:{...defaultSemester,...(importedState.semester||{})}};save();if(d.format==='alex-electric-toolbox-hybrid-backup'){if(d.offlinePackage){offlinePackage=d.offlinePackage;await offlineDbSet('package',offlinePackage)}localStorage.setItem(OFFLINE_PROGRESS_KEY,JSON.stringify(d.unsyncedProgress||{}));localStorage.setItem(OFFLINE_QUIZ_HISTORY_KEY,JSON.stringify(d.quizHistory||[]));localStorage.setItem(OFFLINE_CUB_KEY,JSON.stringify(d.cubicaciones||[]));await saveSyncQueue(d.syncQueue||[]);await bootstrapAuthorized()}renderStudy();renderSemester();renderStats();toast('Respaldo importado')}catch(err){console.error(err);toast('Archivo no válido')}e.target.value=''}
+async function clearData(){if(!confirm('¿Borrar progreso, apuntes y cambios pendientes de este dispositivo? Las guías guardadas y los datos ya sincronizados NO se borrarán.'))return;[KEY,LEGACY_KEY,OFFLINE_PROGRESS_KEY,OFFLINE_QUIZ_HISTORY_KEY,OFFLINE_CUB_KEY,LEGACY_OFFLINE_PROGRESS_KEY,LEGACY_OFFLINE_QUIZ_HISTORY_KEY,LEGACY_OFFLINE_CUB_KEY].forEach(key=>localStorage.removeItem(key));await saveSyncQueue([]);state=loadState();activeModule='corr';renderStudy();renderSemester();renderStats();toast('Datos locales borrados')}
 
 let appInitialized=false;
 async function bootstrapAuthorized(){
@@ -1209,16 +2232,18 @@ async function bootstrapAuthorized(){
   try{
     const data=await rpc('getBootstrapData');
     remote={...remote,...data,access:data.access||remote.access};
+    await refreshAiProviderStatus();
     setAccessUI(remote.access);
     applyRemoteConfig();renderStats();renderAiStatus();renderGuides();
   }catch(e){
     console.error(e);
     const msg=String(e.message||'').toLowerCase();
     if(msg.includes('sesión vencida')||msg.includes('no autorizada')||msg.includes('no autorizado')){
-      accessToken='';
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-      setAccessUI({authorized:false,role:'guest',email:''});
-      out('accessStatus','Sesión vencida. Ingresa nuevamente.','bad');
+      forgetOnlineSession(false);
+      const localData=await localRpc('getBootstrapData');
+      remote={...remote,...localData,access:localData.access};
+      setAccessUI(remote.access);
+      out('accessStatus','La sesión online venció. Puedes reconectarla desde Ajustes.','warn');
       return;
     }
     applyRemoteConfig();toast(e.message||'Error al cargar la app');
@@ -1261,8 +2286,8 @@ async function importOfflinePackageFile(e){
     setAccessUI({
       authorized:true,
       role:'owner',
-      email:'bosquesiniestropaganus@gmail.com',
-      name:'Alex Offline'
+      email:'',
+      name:'Modo local'
     });
 
     await bootstrapAuthorized();
@@ -1287,14 +2312,14 @@ async function importOfflinePackageFile(e){
 }
 
 async function startOfflineEmpty(){
-  offlinePackage=emptyOfflinePackage();
+  offlinePackage=offlinePackage||await offlineDbGet('package')||emptyOfflinePackage();
   await offlineDbSet('package',offlinePackage);
 
   setAccessUI({
     authorized:true,
     role:'owner',
-    email:'bosquesiniestropaganus@gmail.com',
-    name:'Alex Offline'
+    email:'',
+    name:'Modo local'
   });
 
   await bootstrapAuthorized();
@@ -1302,6 +2327,8 @@ async function startOfflineEmpty(){
 
 async function bootstrap(){
   try{
+    migrateLegacyLocalData();
+    await migrateLegacySyncQueue();
     offlinePackage=await offlineDbGet('package');
 
     if(!offlinePackage){
@@ -1309,12 +2336,12 @@ async function bootstrap(){
       await offlineDbSet('package',offlinePackage);
     }
 
-    // V3.1: entra directo como administrador local, sin correo ni PIN.
+    // La app siempre abre con su copia local; la cuenta online se restaura después.
     setAccessUI({
       authorized:true,
       role:'owner',
-      email:'bosquesiniestropaganus@gmail.com',
-      name:'Alex Offline'
+      email:'',
+      name:'Modo local'
     });
 
     await bootstrapAuthorized();
@@ -1328,7 +2355,7 @@ async function bootstrap(){
         'offlinePackageInfo',
         guideCount
           ? `<strong>${guideCount} guía(s)</strong> · ${questionCount} pregunta(s)<br><small>Exportado: ${esc(offlinePackage.exportedAt||'sin fecha')}</small>`
-          : 'Todavía no has importado contenido de estudio. Las calculadoras ya funcionan offline.',
+          : 'Todavía no hay guías guardadas. Las calculadoras ya funcionan offline.',
         guideCount ? 'good' : ''
       );
     }
@@ -1339,7 +2366,7 @@ async function bootstrap(){
         'homeOfflineInfo',
         guideCount
           ? `<strong>${guideCount} guía(s)</strong> y <strong>${questionCount} pregunta(s)</strong> disponibles offline.`
-          : 'Puedes usar las calculadoras inmediatamente. Importa <strong>alex-toolbox-offline-data.json</strong> para cargar tus guías y quiz.',
+          : 'Puedes usar las calculadoras inmediatamente. Al conectar la cuenta, las guías se guardarán solas para el modo offline.',
         guideCount ? 'good' : ''
       );
     }
@@ -1347,15 +2374,14 @@ async function bootstrap(){
   }catch(e){
     console.error(e);
 
-    // Incluso si falla IndexedDB, mostramos la app para que las calculadoras
-    // sigan siendo utilizables.
+    // Incluso si falla IndexedDB, mostramos la app para que las calculadoras sigan disponibles.
     offlinePackage=emptyOfflinePackage();
 
     setAccessUI({
       authorized:true,
       role:'owner',
-      email:'bosquesiniestropaganus@gmail.com',
-      name:'Alex Offline'
+      email:'',
+      name:'Modo local'
     });
 
     try{
@@ -1364,15 +2390,32 @@ async function bootstrap(){
       console.error(inner);
     }
   }
+
+  renderAccountState();
+  updateSyncUi();
+  initBackendBridge();
 }
 
 
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
+    const hadController=!!navigator.serviceWorker.controller;
+    let reloading=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(hadController&&!reloading){
+        reloading=true;
+        location.reload();
+      }
+    });
     navigator.serviceWorker
-      .register('./service-worker.js')
+      .register('./service-worker.js',{updateViaCache:'none'})
+      .then(registration=>registration.update())
       .catch(err=>console.warn('Service Worker:',err));
   });
 }
 
 bootstrap();
+
+setInterval(()=>{
+  if(hybrid.connectionMode!=='offline'&&navigator.onLine&&hybrid.bridgeReady&&!hybrid.syncing)probeBackend();
+},60000);

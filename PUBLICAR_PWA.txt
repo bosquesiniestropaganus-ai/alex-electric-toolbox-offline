@@ -1,22 +1,25 @@
-SIGUIENTE PASO: PUBLICAR LA PWA
+PUBLICAR V4 HYBRID EN EL MISMO GITHUB PAGES
 
-Recomendación simple: GitHub Pages.
+Repositorio actual:
+https://github.com/bosquesiniestropaganus-ai/alex-electric-toolbox-offline
 
-1. Crea un repositorio llamado:
-   alex-electric-toolbox-offline
-2. Sube TODOS los archivos de esta carpeta, no solo index.html.
-3. En GitHub:
-   Settings > Pages
-4. Source:
-   Deploy from a branch
-5. Branch:
-   main / root
-6. Guarda.
-7. GitHub entregará una dirección HTTPS.
-8. Ábrela una vez con internet en tu PC e iPhone.
-9. iPhone Safari:
-   Compartir > Agregar a pantalla de inicio.
-10. PC Chrome/Edge:
-   Instalar aplicación.
+Reemplaza en la raíz:
+- index.html
+- app.js
+- styles.css
+- config.js
+- manifest.json
+- service-worker.js
+- icon-192.png
+- icon-512.png
+- LEEME.txt
+- PUBLICAR_PWA.txt
+- MIGRACION_E_INSTALACION.md
 
-Después de instalarla y abrirla una vez, prueba activando modo avión.
+No subas la carpeta apps-script a GitHub: sus archivos se copian en el editor de Apps Script.
+No subas paquetes JSON con guías o datos personales.
+
+Después del commit, abre una vez:
+https://bosquesiniestropaganus-ai.github.io/alex-electric-toolbox-offline/
+
+La V4 reemplaza la V3 en la misma instalación. Si el nombre antiguo sigue apareciendo, cierra y abre la app otra vez; en iPhone puede ser necesario abrir primero la URL en Safari.

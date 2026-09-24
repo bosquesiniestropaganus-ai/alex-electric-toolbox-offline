@@ -1,12 +1,17 @@
-const CACHE_NAME='alex-electric-toolbox-offline-v3-1';
+const CACHE_NAME='alex-electric-toolbox-hybrid-v4-5-0';
 const APP_SHELL=[
   './',
   './index.html',
+  './config.js',
+  './normativa.js',
   './styles.css',
   './app.js',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './normativa/pdf/decreto-8-2019.pdf',
+  './normativa/pdf/resolucion-33877-sec-firmada.pdf',
+  './normativa/pdf/resolucion-33877-diario-oficial.pdf'
 ];
 
 self.addEventListener('install',event=>{
@@ -38,8 +43,10 @@ self.addEventListener('fetch',event=>{
     event.respondWith(
       fetch(req)
         .then(res=>{
-          const copy=res.clone();
-          caches.open(CACHE_NAME).then(cache=>cache.put('./index.html',copy));
+          if(res.ok){
+            const copy=res.clone();
+            caches.open(CACHE_NAME).then(cache=>cache.put('./index.html',copy));
+          }
           return res;
         })
         .catch(()=>caches.match('./index.html'))
@@ -50,16 +57,20 @@ self.addEventListener('fetch',event=>{
   event.respondWith(
     caches.match(req)
       .then(cached=>{
-        if(cached)return cached;
-
-        return fetch(req)
+        const network=fetch(req)
           .then(res=>{
-            if(new URL(req.url).origin===self.location.origin){
+            if(res.ok&&new URL(req.url).origin===self.location.origin){
               const copy=res.clone();
               caches.open(CACHE_NAME).then(cache=>cache.put(req,copy));
             }
             return res;
-          });
+          })
+          .catch(()=>cached||Response.error());
+        return cached||network;
       })
   );
+});
+
+self.addEventListener('message',event=>{
+  if(event.data&&event.data.type==='SKIP_WAITING')self.skipWaiting();
 });
